@@ -1,0 +1,20 @@
+{
+  "name": "page-pilot-skill-local",
+  "interface": {
+    "displayName": "Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "page-pilot-skill",
+      "source": {
+        "source": "local",
+        "path": "./plugins/page-pilot-skill"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Coding"
+    }
+  ]
+}

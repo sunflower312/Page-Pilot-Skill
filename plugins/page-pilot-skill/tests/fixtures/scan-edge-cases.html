@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Browser Scan Edge Cases</title>
+  </head>
+  <body>
+    <main>
+      <h1>Scan Edge Cases</h1>
+      <form id="edge-form">
+        <button id="save:primary.action" type="button">Escaped action</button>
+        <button type="button" data-testid="panel&quot;one">Escaped test hook</button>
+
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="email@example.com" />
+        <input name="customerEmail" type="email" />
+
+        <label for="schedule">Schedule date</label>
+        <input id="schedule" type="date" />
+
+        <label for="accent">Accent color</label>
+        <input id="accent" type="color" />
+
+        <label for="volume">Volume</label>
+        <input id="volume" type="range" />
+
+        <label for="upload">Upload file</label>
+        <input id="upload" type="file" />
+
+        <fieldset>
+          <legend>Channel</legend>
+          <label for="channel-chat">Chat</label>
+          <input id="channel-chat" type="radio" name="channel" />
+        </fieldset>
+
+        <input id="hidden-token" type="hidden" value="secret" />
+
+        <label for="topic">Topic</label>
+        <select id="topic">
+          <option>Billing</option>
+          <option>Automation</option>
+        </select>
+
+        <label for="notes">Notes</label>
+        <textarea id="notes" placeholder="Add notes"></textarea>
+
+        <label for="agree">Agree to policy</label>
+        <input id="agree" type="checkbox" />
+      </form>
+
+      <section id="shadow-edge-host"></section>
+    </main>
+
+    <script>
+      const shadowHost = document.querySelector('#shadow-edge-host');
+      const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+      shadowRoot.innerHTML = `
+        <button aria-label="Shadow launch">Shadow launch</button>
+        <button aria-label="Hidden shadow action" style="display: none">Hidden shadow action</button>
+        <input aria-label="Shadow email" type="email" placeholder="shadow@example.com" />
+        <textarea aria-label="Shadow notes" placeholder="Shadow note"></textarea>
+        <select aria-label="Shadow topic">
+          <option>Alpha</option>
+        </select>
+        <label>
+          <input type="checkbox" data-testid="shadow-check" />
+          Shadow agree
+        </label>
+        <nested-shadow-host></nested-shadow-host>
+      `;
+
+      const nestedHost = shadowRoot.querySelector('nested-shadow-host');
+      const nestedRoot = nestedHost.attachShadow({ mode: 'open' });
+      nestedRoot.innerHTML = `<button aria-label="Nested shadow action">Nested shadow action</button>`;
+    </script>
+  </body>
+</html>

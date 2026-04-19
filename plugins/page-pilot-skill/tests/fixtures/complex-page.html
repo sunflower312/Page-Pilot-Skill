@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="description" content="Complex structured scan fixture for v2." />
+    <title>Agent Browser Complex Fixture</title>
+  </head>
+  <body>
+    <main id="workspace">
+      <h1>Support Workspace</h1>
+      <p>
+        Review queued issues, route incidents, and validate embedded tools before handing work back to the main
+        workflow.
+      </p>
+
+      <nav aria-label="Primary">
+        <a href="/next-page.html">Read more</a>
+        <a href="/next-page.html#guides">Browse guides</a>
+        <a href="/frame-content.html">Frame docs</a>
+      </nav>
+
+      <section aria-label="Workspace actions">
+        <button id="primary-action" data-testid="primary-action">Open workspace</button>
+        <button id="review-logs" type="button">Review logs</button>
+        <button id="open-help" type="button">Open help</button>
+        <button id="hidden-plain" type="button" style="display: none">Do not keep me</button>
+        <button id="hidden-test-hook" type="button" data-testid="hidden-test-hook" style="display: none">
+          Hidden test hook
+        </button>
+      </section>
+
+      <form id="support-form">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" placeholder="email@example.com" />
+
+        <label for="ticket-id">Ticket ID</label>
+        <input id="ticket-id" name="ticketId" type="text" placeholder="Ticket ID" />
+
+        <label for="search">Search knowledge base</label>
+        <input id="search" name="search" type="search" placeholder="Search docs" />
+
+        <label for="topic">Topic</label>
+        <select id="topic" name="topic">
+          <option>Billing</option>
+          <option>Access</option>
+          <option>Automation</option>
+        </select>
+
+        <label for="details">Details</label>
+        <textarea id="details" name="details" placeholder="Tell us what happened"></textarea>
+
+        <button type="submit">Send request</button>
+      </form>
+
+      <p id="message">Waiting for submit</p>
+
+      <dialog id="confirm-dialog" open aria-label="Confirm send">
+        <p>Review before sending.</p>
+        <button id="confirm-send" type="button">Confirm send</button>
+      </dialog>
+
+      <dialog id="help-dialog" aria-label="Keyboard shortcuts">
+        <p>Press slash to search.</p>
+      </dialog>
+
+      <iframe
+        id="support-frame"
+        name="support-frame"
+        title="Support frame"
+        src="/frame-content.html"
+      ></iframe>
+
+      <section id="shadow-host" data-testid="profile-card-host"></section>
+    </main>
+
+    <script>
+      const form = document.querySelector('#support-form');
+      const message = document.querySelector('#message');
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const email = document.querySelector('#email').value;
+        message.textContent = `Thanks ${email}`;
+      });
+
+      const shadowHost = document.querySelector('#shadow-host');
+      const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+      shadowRoot.innerHTML = `
+        <style>
+          :host {
+            display: block;
+            margin-top: 16px;
+          }
+        </style>
+        <button aria-label="Shadow save">Save draft</button>
+        <input placeholder="Shadow filter" />
+      `;
+    </script>
+  </body>
+</html>

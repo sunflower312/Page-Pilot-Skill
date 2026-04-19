@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Browser Shadow Stability Flow</title>
+  </head>
+  <body>
+    <main>
+      <h1>Shadow Stability Flow</h1>
+      <section id="shadow-flow-host"></section>
+    </main>
+    <script>
+      const host = document.querySelector('#shadow-flow-host');
+      const root = host.attachShadow({ mode: 'open' });
+      root.innerHTML = `
+        <p id="shadow-status">READY</p>
+        <button data-testid="shadow-start">Start shadow sync</button>
+        <button data-testid="shadow-continue" disabled>Continue shadow flow</button>
+      `;
+
+      const status = root.querySelector('#shadow-status');
+      const start = root.querySelector('[data-testid="shadow-start"]');
+      const continueButton = root.querySelector('[data-testid="shadow-continue"]');
+
+      start.addEventListener('click', () => {
+        status.textContent = 'WAITING IN SHADOW';
+        setTimeout(() => {
+          continueButton.disabled = false;
+          status.textContent = 'READY FOR NEXT SHADOW STEP';
+        }, 300);
+      });
+
+      continueButton.addEventListener('click', () => {
+        status.textContent = 'PROCESSING SHADOW FLOW';
+        setTimeout(() => {
+          status.textContent = 'FINAL SHADOW';
+        }, 300);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="description"
+      content="Structured scan should prefer the active dialog action and keep Next over Cancel or Skip."
+    />
+    <title>Dialog Priority Page</title>
+  </head>
+  <body>
+    <main id="dialog-priority-main">
+      <h1>Dialog Priority Page</h1>
+      <p>Use this page to verify dialog-first primary actions and forward-action retention under button budget pressure.</p>
+
+      <form id="profile-form">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="email@example.com" />
+
+        <button id="skip-section-1" type="button">Skip section 1</button>
+        <button id="skip-section-2" type="button">Skip section 2</button>
+        <button id="skip-section-3" type="button">Skip section 3</button>
+        <button id="skip-section-4" type="button">Skip section 4</button>
+        <button id="skip-section-5" type="button">Skip section 5</button>
+        <button id="skip-section-6" type="button">Skip section 6</button>
+        <button id="skip-section-7" type="button">Skip section 7</button>
+        <button id="skip-section-8" type="button">Skip section 8</button>
+        <button id="skip-section-9" type="button">Skip section 9</button>
+        <button id="skip-section-10" type="button">Skip section 10</button>
+
+        <button id="background-save" type="submit">Save profile</button>
+        <button id="step-cancel" type="button">Cancel</button>
+        <button id="step-skip" type="button">Skip</button>
+        <button id="step-next" type="button">Next</button>
+      </form>
+
+      <dialog id="confirm-dialog" open aria-label="Confirm changes">
+        <p>Confirm the current step before continuing.</p>
+        <button id="dialog-cancel" type="button">Cancel</button>
+        <button id="dialog-continue" type="button">Continue</button>
+      </dialog>
+    </main>
+  </body>
+</html>

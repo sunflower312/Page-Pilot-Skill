@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Browser Fixture</title>
+  </head>
+  <body>
+    <main>
+      <h1>Agent Browser Fixture</h1>
+      <p>Use this page to validate structured scanning and automation flows.</p>
+      <a href="/next-page.html">Read more</a>
+      <form id="signup-form">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" placeholder="email@example.com" />
+        <button type="submit">Submit</button>
+      </form>
+      <p id="message">Waiting for submit</p>
+    </main>
+    <script>
+      const form = document.querySelector('#signup-form');
+      const message = document.querySelector('#message');
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const email = document.querySelector('#email').value;
+        message.textContent = `Thanks ${email}`;
+      });
+    </script>
+  </body>
+</html>

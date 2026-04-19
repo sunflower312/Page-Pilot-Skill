@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: Page Pilot Skill
+  description: Headless Playwright tools and workflows for Codex web inspection
+  prompt_hint: Inspect a page headlessly, gather evidence, and help write automation

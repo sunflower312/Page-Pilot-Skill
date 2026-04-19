@@ -1,0 +1,41 @@
+{
+  "name": "page-pilot-skill",
+  "version": "0.1.0",
+  "description": "Semantic page analysis and Playwright authoring assistant for Codex.",
+  "author": {
+    "name": "sunflower312",
+    "email": "cn.mengjk@gmail.com",
+    "url": "https://github.com/sunflower312/Page-Pilot-Skill"
+  },
+  "homepage": "https://github.com/sunflower312/Page-Pilot-Skill",
+  "repository": "https://github.com/sunflower312/Page-Pilot-Skill",
+  "license": "MIT",
+  "keywords": [
+    "playwright",
+    "mcp",
+    "codex",
+    "browser",
+    "automation"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Page Pilot Skill",
+    "shortDescription": "Analyze pages and help write reliable Playwright automation",
+    "longDescription": "Use a local headless Playwright MCP bridge plus a Codex skill to scan pages, validate key interactions, and generate more reliable Playwright automation code.",
+    "developerName": "sunflower312",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/sunflower312/Page-Pilot-Skill",
+    "privacyPolicyURL": "https://github.com/sunflower312/Page-Pilot-Skill",
+    "termsOfServiceURL": "https://github.com/sunflower312/Page-Pilot-Skill",
+    "defaultPrompt": [
+      "Inspect a page headlessly and help me write reliable Playwright automation"
+    ],
+    "brandColor": "#0f172a",
+    "screenshots": []
+  }
+}

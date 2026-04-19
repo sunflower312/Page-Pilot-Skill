@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Browser Stability Flow</title>
+  </head>
+  <body>
+    <main>
+      <h1>Stability Flow</h1>
+      <p id="status">READY</p>
+      <button id="start-sync" data-testid="start-sync">Start sync</button>
+      <button id="continue-flow" data-testid="continue-flow" disabled>Continue</button>
+    </main>
+    <script>
+      const status = document.querySelector('#status');
+      const start = document.querySelector('#start-sync');
+      const continueButton = document.querySelector('#continue-flow');
+
+      start.addEventListener('click', () => {
+        status.textContent = 'WAIT!';
+        setTimeout(() => {
+          continueButton.disabled = false;
+          status.textContent = 'DONE!';
+        }, 300);
+      });
+
+      continueButton.addEventListener('click', () => {
+        status.textContent = 'HOLD!';
+        setTimeout(() => {
+          status.textContent = 'FINAL';
+        }, 300);
+      });
+    </script>
+  </body>
+</html>
