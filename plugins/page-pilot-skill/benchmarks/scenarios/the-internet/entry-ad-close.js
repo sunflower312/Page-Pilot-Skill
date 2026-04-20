@@ -73,7 +73,8 @@ export const scenario = {
           })
         );
         await validatePlaywright(context, sessionId, 'Close the entry-ad modal', [
-          { type: 'click', locator: { strategy: 'text', value: 'Close' } },
+          { type: 'wait_for', value: 1000 },
+          { type: 'click', locator: { strategy: 'css', value: '.modal-footer p' } },
         ]);
         const after = await runProbe(
           context,

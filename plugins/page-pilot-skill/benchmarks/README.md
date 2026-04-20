@@ -43,6 +43,8 @@ Each site manifest records:
 
 Each scenario module uses MCP browser tools such as `browser_open`, `browser_scan`, `browser_rank_locators`, `browser_probe`, `browser_validate_playwright`, `browser_generate_playwright`, `browser_repair_playwright`, and `browser_capture_screenshot`. They do not access Playwright `page` objects directly. For benchmark-internal read-only extraction, the harness may also use a private script probe tool that is not part of the public Page Pilot Skill contract.
 
+Generated-code quality is validated through the emitted `generatedPlan` and the public `browser_validate_playwright` contract. The benchmark suite does not depend on a public “execute arbitrary Playwright code string” tool.
+
 If a third-party practice site is temporarily unavailable and opens with a known external error page, the runner records that scenario as `EXTERNAL_SITE_UNAVAILABLE`. Those scenarios are still reported, but they are excluded from the acceptance and code-quality denominators for that run so site outages do not masquerade as product regressions.
 
 ## Covered Scenario Areas
@@ -75,6 +77,8 @@ The current Beta-level quality gate is enforced in `benchmarks/lib/coverage-matr
 - generated-plan validation pass rate
 - repair pass rate when repairs are attempted
 - average generated code length
+
+Detailed metric definitions and Beta-gate interpretation live in [docs/benchmark-metrics.md](../../docs/benchmark-metrics.md).
 
 ## Commands
 

@@ -128,6 +128,10 @@ async function renderMarkdown(run) {
     );
   }
   lines.push('', '### Code Quality Gate', '');
+  lines.push(`- Eligible scenarios: ${run.coverage.summary.codeQualityEligibleScenarioCount}`);
+  lines.push(
+    `- Eligible scenarios skipped for external outages: ${run.coverage.summary.codeQualityExternalUnavailableSkipped}`
+  );
   lines.push(`- Scenarios with code quality data: ${run.coverage.codeQuality.scenarioCount}`);
   lines.push(`- Semantic locator ratio: ${run.coverage.codeQuality.semanticLocatorRatio}`);
   lines.push(`- CSS fallback ratio: ${run.coverage.codeQuality.cssFallbackRatio}`);

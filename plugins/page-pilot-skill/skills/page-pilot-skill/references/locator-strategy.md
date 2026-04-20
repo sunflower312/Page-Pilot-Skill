@@ -4,9 +4,9 @@ Use locator strategies in this order:
 
 1. `role` with accessible name
 2. `label`
-3. `text`
-4. `placeholder`
-5. `testId`
+3. `testId`
+4. `text`
+5. `placeholder`
 6. CSS fallback
 
 Guidelines:

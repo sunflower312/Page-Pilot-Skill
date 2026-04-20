@@ -5,6 +5,7 @@ import {
   parseOptionToken,
   runtimeTokenCodeExpression,
 } from './runtime-parameters.js';
+import { toPlaywrightExpression } from './playwright-locator-expression.js';
 
 function quote(value) {
   return `'${String(value ?? '').replace(/[\u0000-\u001f\\'\u2028\u2029]/g, (character) => {
@@ -35,30 +36,6 @@ function quote(value) {
 
 function escapeRegex(value) {
   return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function locatorExpression(locator = {}) {
-  if (locator.strategy === 'role') {
-    return `page.getByRole(${quote(locator.value.role)}, { name: ${quote(locator.value.name)}, exact: ${locator.value?.exact !== false ? 'true' : 'false'} })`;
-  }
-
-  if (locator.strategy === 'label') {
-    return `page.getByLabel(${quote(locator.value)})`;
-  }
-
-  if (locator.strategy === 'text') {
-    return `page.getByText(${quote(locator.value)}, { exact: true })`;
-  }
-
-  if (locator.strategy === 'placeholder') {
-    return `page.getByPlaceholder(${quote(locator.value)})`;
-  }
-
-  if (locator.strategy === 'testId') {
-    return `page.getByTestId(${quote(locator.value)})`;
-  }
-
-  return `page.locator(${quote(locator.value)})`;
 }
 
 function renderStability(step, index) {
@@ -183,6 +160,26 @@ function buildLocatorChoice(step = {}) {
   };
 }
 
+function appendLocatorWarnings(locatorChoices = [], warnings = []) {
+  locatorChoices.forEach((choice, index) => {
+    if (choice.locator?.strategy === 'css') {
+      warnings.push({
+        stepIndex: index,
+        code: 'CSS_FALLBACK_USED',
+        message: 'Generated code fell back to a CSS locator because no stronger semantic locator was verified',
+      });
+    }
+
+    if (choice.verification && (choice.verification.unique !== true || choice.verification.usable !== true)) {
+      warnings.push({
+        stepIndex: index,
+        code: 'LOCATOR_NOT_FULLY_VERIFIED',
+        message: 'Generated locator did not have a unique verified match in the captured validation evidence',
+      });
+    }
+  });
+}
+
 function normalizeValidationEvidence({ validationEvidence, validatedSteps }) {
   if (validationEvidence?.steps) {
     return validationEvidence.steps;
@@ -298,7 +295,7 @@ function buildGeneratedPlan(startUrl, steps = []) {
 
 function renderStep(step, index, warnings) {
   const locatorRef = step.locatorChoice ?? step.locator;
-  const locator = locatorRef ? locatorExpression(locatorRef) : null;
+  const locator = locatorRef ? toPlaywrightExpression(locatorRef, { quote }) : null;
 
   if (step.type === 'fill') {
     return [`await expect(${locator}).toBeVisible();`, `await ${locator}.fill(${renderValueExpression(step.value)});`, ...renderStability(step, index)];
@@ -385,6 +382,7 @@ export function generatePlaywrightTest({
   const locatorChoices = effectiveSteps
     .filter((step) => step.locatorChoice || step.locator || step.locatorRanking?.[0]?.preferredLocator)
     .map((step) => buildLocatorChoice(step));
+  appendLocatorWarnings(locatorChoices, warnings);
   const fallbackLocatorChoices = locatorChoices.map((choice) => choice.fallbackLocators ?? []);
   const assertionPlan = effectiveSteps.map((step) => step.assertionPlan).filter(Boolean);
   const expectedStateChanges = effectiveSteps.map((step) => step.expectedStateChange).filter(Boolean);

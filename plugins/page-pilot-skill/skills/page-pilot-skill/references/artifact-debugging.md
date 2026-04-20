@@ -14,8 +14,8 @@
 
 ## Use storage state when
 
-- the next Playwright script should reuse the same headless session state
-- you need a durable login or post-action context for later tests
+- you already have a storage-state file from outside this public MCP contract
+- the next Playwright script should reuse an existing durable login or post-action context
 
 ## Default rule
 

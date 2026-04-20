@@ -93,6 +93,7 @@ export const scenario = {
         );
         await validatePlaywright(context, sessionId, 'Remove the checkbox control', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Remove' } } },
+          { type: 'wait_for', value: 5000 },
         ]);
         const removed = await runProbe(
           context,
@@ -115,6 +116,7 @@ export const scenario = {
         );
         await validatePlaywright(context, sessionId, 'Restore the checkbox control', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Add' } } },
+          { type: 'wait_for', value: 5000 },
         ]);
         const restored = await runProbe(
           context,
@@ -137,6 +139,7 @@ export const scenario = {
         );
         await validatePlaywright(context, sessionId, 'Enable the input field', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Enable' } } },
+          { type: 'wait_for', value: 5000 },
         ]);
         const enabled = await runProbe(
           context,

@@ -53,7 +53,10 @@ test('generatePlaywrightTest emits runnable TS from verified action trace', () =
   assert.match(code, /readAssertionText\(page\.locator\('#message'\)\)/);
   assert.match(code, /\.toContain\('Thanks qa@example\.com'\)/);
   assert.match(code, /expect\.poll\(async \(\) => page\.url\(\)\)\.toContain\('\/structured-page\.html'\);/);
-  assert.deepEqual(generated.warnings, []);
+  assert.deepEqual(
+    generated.warnings.map((warning) => warning.code),
+    ['CSS_FALLBACK_USED']
+  );
   assert.equal(generated.metrics.semanticLocatorRatio, 0.67);
   assert.equal(generated.locatorChoices[0].locator.strategy, 'role');
   assert.equal(generated.assertionPlan.length, 2);
@@ -312,6 +315,33 @@ test('generatePlaywrightTest prefers the Playwright-verified locator over higher
   assert.match(generated.code, /page\.locator\('#customer\\\\\.firstName'\)\.fill\('Bench'\)/);
   assert.equal(generated.locatorChoices[0].locator.strategy, 'css');
   assert.equal(generated.generatedPlan[0].locator.strategy, 'css');
+});
+
+test('generatePlaywrightTest emits structured warnings when codegen falls back to css', () => {
+  const generated = generatePlaywrightTest({
+    validationEvidence: {
+      steps: [
+        {
+          type: 'click',
+          locatorChoice: { strategy: 'css', value: '.submit-button' },
+          fallbackLocatorChoices: [{ strategy: 'text', value: 'Submit' }],
+          codegenVerification: {
+            locator: { strategy: 'css', value: '.submit-button' },
+            unique: true,
+            usable: true,
+            count: 1,
+          },
+          expectedStateChange: { kind: 'dom_change', textIncludes: 'Saved' },
+        },
+      ],
+    },
+  });
+
+  assert.equal(generated.locatorChoices[0].locator.strategy, 'css');
+  assert.deepEqual(
+    generated.warnings.map((warning) => warning.code),
+    ['CSS_FALLBACK_USED']
+  );
 });
 
 test('generatePlaywrightTest emits dynamic select option helpers for option position tokens', () => {

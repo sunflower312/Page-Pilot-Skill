@@ -1,25 +1,4 @@
-function toPlaywrightExpression(locator) {
-  if (!locator) {
-    return null;
-  }
-
-  if (locator.strategy === 'role') {
-    return `page.getByRole(${JSON.stringify(locator.value.role)}, { name: ${JSON.stringify(locator.value.name)}, exact: ${locator.value?.exact !== false ? 'true' : 'false'} })`;
-  }
-  if (locator.strategy === 'label') {
-    return `page.getByLabel(${JSON.stringify(locator.value)})`;
-  }
-  if (locator.strategy === 'testId') {
-    return `page.getByTestId(${JSON.stringify(locator.value)})`;
-  }
-  if (locator.strategy === 'text') {
-    return `page.getByText(${JSON.stringify(locator.value)}, { exact: true })`;
-  }
-  if (locator.strategy === 'placeholder') {
-    return `page.getByPlaceholder(${JSON.stringify(locator.value)})`;
-  }
-  return `page.locator(${JSON.stringify(locator.value)})`;
-}
+import { toPlaywrightExpression } from './playwright-locator-expression.js';
 
 function buildSignalScore(strategy, value, element = {}) {
   const confidenceBoost = Math.round((element.confidence?.score ?? 0) * 10);
@@ -44,7 +23,7 @@ function buildSignalScore(strategy, value, element = {}) {
   }
 
   if (strategy === 'placeholder') {
-    return 74 + confidenceBoost + contextBoost;
+    return 66 + confidenceBoost + contextBoost;
   }
 
   return 12;
@@ -96,7 +75,7 @@ function createCandidate(strategy, value, element = {}) {
       fallbackReason: null,
     },
     placeholder: {
-      score: 72,
+      score: 66,
       confidence: 'medium',
       uniqueHint: 'medium',
       stability: 'medium',
@@ -134,6 +113,7 @@ function createCandidate(strategy, value, element = {}) {
 
   return {
     locator,
+    locatorType: strategy,
     score,
     confidence: metadata.confidence,
     uniqueHint: metadata.uniqueHint,

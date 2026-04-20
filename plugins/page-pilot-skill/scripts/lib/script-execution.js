@@ -5,6 +5,7 @@ const TRANSIENT_EXECUTION_CONTEXT_PATTERNS = [
 ];
 const NAVIGATION_EXECUTION_CONTEXT_PATTERN =
   /^page\.evaluate:\s*Execution context was destroyed, most likely because of a navigation\b/i;
+const MAX_SERIALIZED_PROBE_BYTES = 16 * 1024;
 
 export function serializeForTransport(value, depth = 0, seen = new WeakSet()) {
   const clip = (input) => String(input ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
@@ -123,9 +124,26 @@ function createNavigationInterruptionError(error) {
   return wrapped;
 }
 
+function assertProbeResultWithinBounds(result) {
+  const encoded = new TextEncoder().encode(JSON.stringify(result));
+  if (encoded.length <= MAX_SERIALIZED_PROBE_BYTES) {
+    return result;
+  }
+
+  const error = new Error(
+    `Probe result exceeded ${MAX_SERIALIZED_PROBE_BYTES} bytes after serialization`
+  );
+  error.code = 'PROBE_RESULT_TOO_LARGE';
+  error.details = {
+    maxBytes: MAX_SERIALIZED_PROBE_BYTES,
+    actualBytes: encoded.length,
+  };
+  throw error;
+}
+
 export async function executeReadonlyScriptProbe(page, { source, timeoutMs = 3000 }) {
   try {
-    return await page.evaluate(
+    const result = await page.evaluate(
       async ({ source, serializerSource, timeoutMs }) => {
         const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
         const fn = new AsyncFunction(source);
@@ -148,6 +166,7 @@ export async function executeReadonlyScriptProbe(page, { source, timeoutMs = 300
         timeoutMs,
       }
     );
+    return assertProbeResultWithinBounds(result);
   } catch (error) {
     if (isNavigationDrivenExecutionContextError(error)) {
       throw createNavigationInterruptionError(error);

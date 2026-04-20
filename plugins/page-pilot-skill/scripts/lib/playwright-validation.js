@@ -1,5 +1,5 @@
 import { collectStructuredPageData } from './structured-scan.js';
-import { deriveSemanticTargetFromLocator, rankSemanticTarget } from './locator-ranking-tool.js';
+import { deriveSemanticTargetFromLocator, rankSemanticTarget } from './semantic-target-ranking.js';
 import { verifyLocatorCandidate } from './locator-runtime.js';
 
 function countActionSteps(steps = [], predicate) {

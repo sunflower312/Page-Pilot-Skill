@@ -30,8 +30,8 @@
       "Write"
     ],
     "websiteURL": "https://github.com/sunflower312/Page-Pilot-Skill",
-    "privacyPolicyURL": "https://github.com/sunflower312/Page-Pilot-Skill",
-    "termsOfServiceURL": "https://github.com/sunflower312/Page-Pilot-Skill",
+    "privacyPolicyURL": "https://github.com/sunflower312/Page-Pilot-Skill/blob/main/docs/privacy-policy.md",
+    "termsOfServiceURL": "https://github.com/sunflower312/Page-Pilot-Skill/blob/main/docs/terms-of-service.md",
     "defaultPrompt": [
       "Inspect a page headlessly and help me write reliable Playwright automation"
     ],

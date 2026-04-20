@@ -1,6 +1,6 @@
 import { captureActionStabilityBaseline, waitForActionStability } from './action-stability.js';
 import { browserReadAssertionText } from './assertion-text.js';
-import { deriveSemanticTargetFromLocator, rankSemanticTarget } from './locator-ranking-tool.js';
+import { deriveSemanticTargetFromLocator, rankSemanticTarget } from './semantic-target-ranking.js';
 import { isPointerInterceptionError, recoverCheckboxToggle, resolveActionLocator, verifyLocatorCandidate } from './locator-runtime.js';
 import { createRuntimeParameterResolver, parseOptionToken } from './runtime-parameters.js';
 import { collectStructuredPageData } from './structured-scan.js';

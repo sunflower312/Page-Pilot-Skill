@@ -13,6 +13,8 @@ import { collectStructuredPageData } from '../../scripts/lib/structured-scan.js'
 
 const integrationDir = fileURLToPath(new URL('.', import.meta.url));
 const fixtureRoot = resolve(integrationDir, '..', 'fixtures');
+const pluginRoot = resolve(integrationDir, '..', '..');
+const artifactRoot = resolve(pluginRoot, '..', '..', 'artifacts', 'page-pilot-skill');
 
 function startFixtureServer(entryFile = 'structured-page.html') {
   return new Promise((resolve) => {
@@ -109,7 +111,7 @@ async function readAndResetScanCostCounters(page) {
 test('browser manager opens a complex page and structured scan returns v2 summaries', async () => {
   const fixtureServer = await startFixtureServer('complex-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -118,7 +120,7 @@ test('browser manager opens a complex page and structured scan returns v2 summar
     const brief = await collectStructuredPageData(session.page, { detailLevel: 'brief' });
     const full = await collectStructuredPageData(session.page, { detailLevel: 'full' });
 
-    assert.match(full.title, /Agent Browser Complex Fixture/);
+    assert.match(full.title, /Page Pilot Skill Complex Fixture/);
     assert.equal(brief.summary.retainedInteractiveCount < full.summary.retainedInteractiveCount, true);
     assert.equal(full.document.dialogs.some((dialog) => dialog.name === 'Confirm send'), true);
     assert.equal(full.document.frames[0].title, 'Support frame');
@@ -131,10 +133,17 @@ test('browser manager opens a complex page and structured scan returns v2 summar
       'role'
     );
     assert.equal(full.hints.primaryAction.label, 'Confirm send');
+    assert.equal(full.schemaVersion, 'scan.v2');
+    assert.deepEqual(full.document.regions.forms, [{ name: 'support-form' }]);
 
     const emailField = full.interactives.inputs.find((entry) => entry.css === '#email');
     assert.equal(emailField.accessibleName, 'Email');
     assert.equal(emailField.visibleText, 'Email');
+    assert.deepEqual(emailField.attributes, {
+      label: 'Email',
+      placeholder: 'email@example.com',
+      testId: '',
+    });
     assert.equal(emailField.localContext.form?.name, 'support-form');
     assert.equal(emailField.actionability.actionable, true);
     assert.equal(emailField.geometry.width > 0, true);
@@ -160,7 +169,7 @@ test('browser manager opens a complex page and structured scan returns v2 summar
 test('structured scan filters non-automatable input types and includes shadow form controls', async () => {
   const fixtureServer = await startFixtureServer('scan-edge-cases.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -202,7 +211,7 @@ test('structured scan filters non-automatable input types and includes shadow fo
 test('structured scan keeps workflow buttons and links when chrome fills the early browser-side budget', async () => {
   const fixtureServer = await startFixtureServer('workflow-priority-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -255,7 +264,7 @@ test('structured scan infers input submit names and table-row field labels for s
     '/semantic-fields'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -291,7 +300,7 @@ test('structured scan infers input submit names and table-row field labels for s
 test('observation keeps workflow controls over chrome when the page has many early actions', async () => {
   const fixtureServer = await startFixtureServer('workflow-priority-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -344,7 +353,7 @@ test('observation retains workflow controls when early chrome buttons exceed the
     '/observation-budget'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -389,7 +398,7 @@ test('observation and structured scan both retain a late Continue workflow butto
     '/shared-runtime-budget'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -428,7 +437,7 @@ test('observation and structured scan exclude aria-disabled workflow controls fr
     '/aria-disabled-workflow'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -457,7 +466,7 @@ test('observation and structured scan exclude aria-disabled workflow controls fr
 test('structured scan prioritizes the active dialog action and retains next over cancel or skip at the browser-side limit', async () => {
   const fixtureServer = await startFixtureServer('dialog-priority-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -478,7 +487,7 @@ test('structured scan prioritizes the active dialog action and retains next over
 test('structured scan uses the workflow link as primaryAction when buttons are only header chrome', async () => {
   const fixtureServer = await startFixtureServer('link-primary-action-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -501,7 +510,7 @@ test('structured scan uses the workflow link as primaryAction when buttons are o
 test('observation captures shadow DOM text changes', async () => {
   const fixtureServer = await startFixtureServer('complex-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -528,7 +537,7 @@ test('observation captures shadow DOM text changes', async () => {
 test('observation reports semantic dialog closure and primary action handoff on the dialog fixture', async () => {
   const fixtureServer = await startFixtureServer('dialog-priority-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -557,7 +566,7 @@ test('observation reports semantic dialog closure and primary action handoff on 
 test('runActions waits through delayed UI state changes before the next step', async () => {
   const fixtureServer = await startFixtureServer('stability-flow.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -584,7 +593,7 @@ test('runActions waits through delayed UI state changes before the next step', a
 test('runActions records url_change stability for click-driven navigation', async () => {
   const fixtureServer = await startFixtureServer('structured-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -638,7 +647,7 @@ test('runActions records url_change when delayed navigation destroys the previou
     '/start'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -664,7 +673,7 @@ test('runActions records url_change when delayed navigation destroys the previou
 test('runActions waits through delayed shadow DOM-only state changes before the next step', async () => {
   const fixtureServer = await startFixtureServer('shadow-stability-flow.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -690,7 +699,7 @@ test('runActions waits through delayed shadow DOM-only state changes before the 
 test('collectStructuredPageData includes shadow DOM text in scan summaries', async () => {
   const fixtureServer = await startFixtureServer('shadow-stability-flow.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -715,7 +724,7 @@ test('collectStructuredPageData includes shadow DOM text in scan summaries', asy
 test('waitForActionStability observes delayed updates inside open shadow DOM', async () => {
   const fixtureServer = await startFixtureServer('shadow-stability-flow.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -748,7 +757,7 @@ test('waitForActionStability observes delayed updates inside open shadow DOM', a
 test('waitForActionStability reports semantic changes for delayed enablement on the stability fixture', async () => {
   const fixtureServer = await startFixtureServer('stability-flow.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -799,7 +808,7 @@ test('observation captures checkbox toggles as semantic interaction changes even
     '/checkbox-observation'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -828,7 +837,7 @@ test('observation captures checkbox toggles as semantic interaction changes even
 test('collectStructuredPageData reduces browser-side shadow and frame work for brief scans', async () => {
   const fixtureServer = await startFixtureServer('complex-page.html');
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 
@@ -920,7 +929,7 @@ test('runActions recovers custom checkbox checks when the input is covered by an
     '/checkbox'
   );
   const manager = new BrowserManager({
-    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    artifactRoot,
     idleMs: 30000,
   });
 

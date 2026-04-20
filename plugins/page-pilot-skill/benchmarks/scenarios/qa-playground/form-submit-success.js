@@ -3,6 +3,7 @@ import {
   runProbe,
   finalizeScenario,
   validatePlaywright,
+  validatePlaywrightBatches,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -27,22 +28,31 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the practice form page', 'brief');
-      await validatePlaywright(context, sessionId, 'Fill and submit the practice form', [
-        { type: 'fill', locator: { strategy: 'testId', value: 'input-first-name' }, value: 'John' },
-        { type: 'fill', locator: { strategy: 'testId', value: 'input-last-name' }, value: 'Doe' },
-        { type: 'fill', locator: { strategy: 'testId', value: 'input-email' }, value: 'john@example.com' },
-        { type: 'fill', locator: { strategy: 'testId', value: 'input-phone' }, value: '9876543210' },
-        { type: 'fill', locator: { strategy: 'css', value: '#dob' }, value: '1995-06-15' },
-        { type: 'check', locator: { strategy: 'testId', value: 'radio-gender-male' } },
-        { type: 'click', locator: { strategy: 'testId', value: 'select-country' } },
-        { type: 'click', locator: { strategy: 'role', value: { role: 'option', name: 'India' } } },
-        { type: 'fill', locator: { strategy: 'testId', value: 'input-city' }, value: 'Mumbai' },
-        { type: 'fill', locator: { strategy: 'testId', value: 'textarea-bio' }, value: 'Benchmark submission' },
-        { type: 'check', locator: { strategy: 'testId', value: 'checkbox-interest-selenium' } },
-        { type: 'fill', locator: { strategy: 'css', value: '#password' }, value: 'secret123' },
-        { type: 'fill', locator: { strategy: 'testId', value: 'input-confirm-password' }, value: 'secret123' },
-        { type: 'check', locator: { strategy: 'testId', value: 'checkbox-terms' } },
-        { type: 'click', locator: { strategy: 'testId', value: 'submit-form-btn' } },
+      await validatePlaywrightBatches(context, sessionId, 'Fill and submit the practice form', [
+        [
+          { type: 'fill', locator: { strategy: 'testId', value: 'input-first-name' }, value: 'John' },
+          { type: 'fill', locator: { strategy: 'testId', value: 'input-last-name' }, value: 'Doe' },
+          { type: 'fill', locator: { strategy: 'testId', value: 'input-email' }, value: 'john@example.com' },
+          { type: 'fill', locator: { strategy: 'testId', value: 'input-phone' }, value: '9876543210' },
+          { type: 'fill', locator: { strategy: 'css', value: '#dob' }, value: '1995-06-15' },
+          { type: 'check', locator: { strategy: 'testId', value: 'radio-gender-male' } },
+          { type: 'fill', locator: { strategy: 'testId', value: 'input-city' }, value: 'Mumbai' },
+          { type: 'fill', locator: { strategy: 'testId', value: 'textarea-bio' }, value: 'Benchmark submission' },
+        ],
+        [
+          { type: 'click', locator: { strategy: 'testId', value: 'select-country' } },
+          { type: 'wait_for', value: 300 },
+          {
+            type: 'click',
+            locator: { strategy: 'css', value: '[role="option"][data-value="India"]' },
+            fallbackLocators: [{ strategy: 'role', value: { role: 'option', name: 'India' } }],
+          },
+          { type: 'check', locator: { strategy: 'testId', value: 'checkbox-interest-selenium' } },
+          { type: 'fill', locator: { strategy: 'css', value: '#password' }, value: 'secret123' },
+          { type: 'fill', locator: { strategy: 'testId', value: 'input-confirm-password' }, value: 'secret123' },
+          { type: 'check', locator: { strategy: 'testId', value: 'checkbox-terms' } },
+          { type: 'click', locator: { strategy: 'testId', value: 'submit-form-btn' } },
+        ],
       ]);
       const verification = await runProbe(
         context,

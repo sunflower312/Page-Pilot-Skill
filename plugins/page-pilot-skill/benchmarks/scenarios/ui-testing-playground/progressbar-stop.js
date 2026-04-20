@@ -20,7 +20,7 @@ const readProgressStateScript = `
   };
 `;
 
-async function waitForProgressTarget(context, sessionId, target = 60, timeoutMs = 25000) {
+async function waitForProgressTarget(context, sessionId, target = 70, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {

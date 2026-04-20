@@ -96,6 +96,27 @@ test('executeReadonlyScriptProbe surfaces genuine probe failures', async () => {
   );
 });
 
+test('executeReadonlyScriptProbe rejects oversized serialized payloads', async () => {
+  const page = {
+    async evaluate(fn, input) {
+      return await fn(input);
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      executeReadonlyScriptProbe(page, {
+        source: `return { text: 'x'.repeat(25000) };`,
+        timeoutMs: 100,
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_RESULT_TOO_LARGE');
+      assert.match(error.message, /probe result exceeded/i);
+      return true;
+    }
+  );
+});
+
 test('executeProbeTemplate returns a bounded document snapshot', async () => {
   const page = {
     async evaluate(fn, input) {

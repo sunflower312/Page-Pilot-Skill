@@ -11,7 +11,7 @@ function createPageLike(fixtureData) {
 
 function createFixtureData() {
   return {
-    title: 'Agent Browser Complex Fixture',
+    title: 'Page Pilot Skill Complex Fixture',
     url: 'http://fixture.local/complex-page.html',
     text:
       'Support workspace for triaging queued requests, routing issues, and validating embedded tools before launch.',
@@ -571,7 +571,7 @@ test('buildLocatorCandidates returns stable ordered candidates', () => {
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.strategy),
-    ['role', 'label', 'testId', 'placeholder', 'text', 'css']
+    ['role', 'label', 'testId', 'text', 'placeholder', 'css']
   );
   assert.deepEqual(candidates[0].value, { role: 'textbox', name: 'Email', exact: true });
 });
@@ -583,8 +583,8 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   const full = await collectStructuredPageData(createPageLike(fixtureData), { detailLevel: 'full' });
 
   assert.equal(brief.ok, true);
-  assert.equal(brief.title, 'Agent Browser Complex Fixture');
-  assert.equal(brief.document.title, 'Agent Browser Complex Fixture');
+  assert.equal(brief.title, 'Page Pilot Skill Complex Fixture');
+  assert.equal(brief.document.title, 'Page Pilot Skill Complex Fixture');
   assert.equal(brief.document.description, undefined);
   assert.equal(brief.document.dialogs.length, 1);
   assert.equal(brief.document.frames.length, 1);
@@ -622,7 +622,7 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   assert.equal(full.interactives.inputs[0].domIndex >= 0, true);
   assert.deepEqual(
     full.interactives.inputs[0].locators.map((candidate) => candidate.strategy),
-    ['role', 'label', 'placeholder', 'text', 'css']
+    ['role', 'label', 'text', 'placeholder', 'css']
   );
   assert.deepEqual(full.hints.primaryAction.locator, {
     strategy: 'role',
@@ -632,11 +632,20 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   assert.equal(full.hints.possibleResultRegions.length, 2);
   assert.equal(full.hints.context.hasFrames, true);
   assert.equal(full.hints.context.hasShadowHosts, true);
+  assert.equal(full.schemaVersion, 'scan.v2');
+  assert.deepEqual(full.document.regions.main, [{ name: 'main' }]);
+  assert.deepEqual(full.document.regions.forms, [{ name: 'support-form' }]);
+  assert.equal(full.document.regions.shadowRoots[0].css, '#shadow-host');
 
   const emailField = full.interactives.inputs.find((entry) => entry.css === '#email');
   assert.equal(emailField.accessibleName, 'Email');
   assert.equal(emailField.visibleText, 'Email');
   assert.equal(emailField.description, '');
+  assert.deepEqual(emailField.attributes, {
+    label: 'Email',
+    placeholder: 'email@example.com',
+    testId: '',
+  });
   assert.deepEqual(emailField.state, {
     disabled: false,
     required: false,

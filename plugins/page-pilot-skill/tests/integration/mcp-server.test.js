@@ -78,7 +78,6 @@ test('mcp server lists browser tools over stdio', async () => {
       'browser_scan',
       'browser_snapshot_dom',
       'browser_validate_playwright',
-      'browser_validate_playwright_code',
     ]);
   } finally {
     await client.close();
@@ -115,7 +114,7 @@ test('mcp browser_probe returns bounded template snapshots', async () => {
 
     assert.equal(documentProbe.structuredContent.ok, true);
     assert.equal(documentProbe.structuredContent.template, 'document_snapshot');
-    assert.equal(documentProbe.structuredContent.data.title, 'Agent Browser Fixture');
+    assert.equal(documentProbe.structuredContent.data.title, 'Page Pilot Skill Fixture');
     assert.match(documentProbe.structuredContent.data.url, /\/structured-page\.html$/);
     assert.match(documentProbe.structuredContent.data.text, /Waiting for submit/);
 
@@ -232,7 +231,7 @@ test('mcp browser_probe rejects internal-only templates from the public contract
       arguments: { sessionId, detailLevel: 'brief' },
     });
     assert.match(scanResult.structuredContent.url, /\/structured-page\.html$/);
-    assert.match(scanResult.structuredContent.title, /Agent Browser Fixture/);
+    assert.match(scanResult.structuredContent.title, /Page Pilot Skill Fixture/);
 
     await client.callTool({
       name: 'browser_close',
@@ -244,7 +243,7 @@ test('mcp browser_probe rejects internal-only templates from the public contract
   }
 });
 
-test('mcp browser_validate_playwright_code executes generated snippets directly', async () => {
+test('mcp browser_validate_playwright rejects unbounded validation sequences', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -261,21 +260,25 @@ test('mcp browser_validate_playwright_code executes generated snippets directly'
     });
     const sessionId = openResult.structuredContent.sessionId;
 
-    const result = await client.callTool({
-      name: 'browser_validate_playwright_code',
+    const steps = Array.from({ length: 13 }, () => ({ type: 'wait_for', value: 1 }));
+    const validationResult = await client.callTool({
+      name: 'browser_validate_playwright',
       arguments: {
         sessionId,
-        code: [
-          `const email = page.getByRole('textbox', { name: 'Email' });`,
-          `await email.fill('qa@example.com');`,
-          `await page.getByRole('button', { name: 'Submit' }).click();`,
-          `await expect.poll(async () => page.locator('#message').textContent()).toContain('qa@example.com');`,
-        ].join('\n'),
+        steps,
       },
     });
 
-    assert.equal(result.structuredContent.ok, true);
-    assert.match(result.structuredContent.finalUrl, /structured-page\.html$/);
+    assert.equal(validationResult.isError, true);
+    assert.match(
+      validationResult.content.find((entry) => entry.type === 'text')?.text ?? '',
+      /too_big|too many|max|steps/i
+    );
+
+    await client.callTool({
+      name: 'browser_close',
+      arguments: { sessionId },
+    });
   } finally {
     await client.close();
     await fixtureServer.close();
@@ -300,13 +303,13 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     });
     const sessionId = openResult.structuredContent.sessionId;
     assert.equal(openResult.structuredContent.ok, true);
-    assert.match(openResult.structuredContent.title, /Agent Browser Fixture/);
+    assert.match(openResult.structuredContent.title, /Page Pilot Skill Fixture/);
 
     const scanResult = await client.callTool({
       name: 'browser_scan',
       arguments: { sessionId, detailLevel: 'standard' },
     });
-    assert.match(scanResult.structuredContent.title, /Agent Browser Fixture/);
+    assert.match(scanResult.structuredContent.title, /Page Pilot Skill Fixture/);
     assert.equal(
       scanResult.structuredContent.interactives.inputs.find((entry) => entry.css === '#email').preferredLocator.strategy,
       'role'
@@ -327,6 +330,16 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     assert.equal(rankingResult.structuredContent.matches[0].element.accessibleName, 'Email');
     assert.equal(rankingResult.structuredContent.matches[0].matchCount, 1);
     assert.match(rankingResult.structuredContent.matches[0].playwrightExpression, /page\.getByRole/);
+    assert.deepEqual(
+      rankingResult.structuredContent.matches[0].locatorChoices.map((choice) => choice.locatorType),
+      ['role', 'label', 'text', 'placeholder', 'css']
+    );
+    assert.equal(rankingResult.structuredContent.matches[0].locatorChoices[0].matchCount, 1);
+    assert.match(rankingResult.structuredContent.matches[0].locatorChoices[0].playwrightExpression, /page\.getByRole/);
+    assert.equal(
+      rankingResult.structuredContent.matches[0].locatorChoices.at(-1).fallbackReason,
+      'css_fallback'
+    );
 
     const probeResult = await client.callTool({
       name: 'browser_probe',
@@ -339,7 +352,7 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
       },
     });
     assert.equal(probeResult.structuredContent.ok, true);
-    assert.equal(probeResult.structuredContent.data.title, 'Agent Browser Fixture');
+    assert.equal(probeResult.structuredContent.data.title, 'Page Pilot Skill Fixture');
     assert.match(probeResult.structuredContent.data.text, /Waiting for submit/);
 
     const serializedProbeResult = await client.callTool({
@@ -476,7 +489,12 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     assert.equal(repairedActionsResult.structuredContent.revalidated, true);
     assert.equal(repairedActionsResult.structuredContent.validation.repaired, true);
     assert.equal(repairedActionsResult.structuredContent.repairStrategy, 'locator_reordered');
-    assert.match(repairedActionsResult.structuredContent.repairedCode, /Submit/);
+    assert.match(repairedActionsResult.structuredContent.repairedArtifacts.code, /Submit/);
+    assert.equal(
+      repairedActionsResult.structuredContent.repairedArtifacts.generatedPlan.find((step) => step.type === 'click').locator.strategy,
+      'role'
+    );
+    assert.equal(repairedActionsResult.structuredContent.repairedArtifacts.locatorChoices[0].locator.strategy, 'role');
 
     const preservedCodeResult = await client.callTool({
       name: 'browser_generate_playwright',
@@ -613,7 +631,7 @@ test('mcp browser_generate_playwright accumulates passed validation batches with
   }
 });
 
-test('mcp browser_generate_playwright clears stale successful evidence after a later failure', async () => {
+test('mcp browser_generate_playwright preserves earlier passed evidence after a later failed validation', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -653,8 +671,9 @@ test('mcp browser_generate_playwright clears stale successful evidence after a l
       arguments: { sessionId, testName: 'stale-evidence' },
     });
 
-    assert.equal(generated.structuredContent.ok, false);
-    assert.equal(generated.structuredContent.error.code, 'NO_VALIDATED_FLOW');
+    assert.equal(generated.structuredContent.ok, true);
+    assert.match(generated.structuredContent.code, /Submit/);
+    assert.equal(generated.structuredContent.generatedPlan.some((step) => step.type === 'click'), true);
   } finally {
     await client.close();
     await fixtureServer.close();

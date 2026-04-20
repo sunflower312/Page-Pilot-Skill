@@ -269,11 +269,41 @@ function baseResult(site, scenario, moduleId) {
 }
 
 function extractCodeQualityMetrics(steps = []) {
-  const codeQualityEntries = steps
-    .map((step) => step.details?.codeQuality ?? null)
-    .filter((entry) => entry && typeof entry === 'object');
+  const entries = steps
+    .map((step) => ({
+      codeQuality: step.details?.codeQuality ?? null,
+      generatedValidation: step.details?.generatedValidation ?? null,
+    }))
+    .filter((entry) => entry.codeQuality && typeof entry.codeQuality === 'object');
 
-  return codeQualityEntries.at(-1) ?? null;
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const latest = entries.at(-1).codeQuality;
+  const attemptedGeneratedValidations = entries.filter(
+    (entry) =>
+      entry.generatedValidation &&
+      typeof entry.generatedValidation === 'object' &&
+      entry.generatedValidation.skipped !== true
+  );
+
+  return {
+    ...latest,
+    evidenceScope: latest.evidenceScope ?? (attemptedGeneratedValidations.length > 0 ? 'cumulative_session_validation_evidence' : null),
+    firstValidationPassed: entries.every((entry) => entry.codeQuality.firstValidationPassed === true),
+    generatedValidationPassed:
+      attemptedGeneratedValidations.length === 0
+        ? latest.generatedValidationPassed ?? false
+        : attemptedGeneratedValidations.every((entry) => entry.generatedValidation.ok === true),
+    generatedValidationScope:
+      attemptedGeneratedValidations.length === 0
+        ? latest.generatedValidationScope ?? 'not_attempted'
+        : 'cumulative_generated_plan',
+    repaired: entries.some((entry) => entry.codeQuality.repaired === true),
+    validationBatchCount: entries.length,
+    generatedValidationAttemptCount: attemptedGeneratedValidations.length,
+  };
 }
 
 async function executeScenario({ site, scenario, ensureClient, moduleLoader }) {

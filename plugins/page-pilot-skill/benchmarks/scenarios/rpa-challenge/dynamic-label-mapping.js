@@ -3,6 +3,7 @@ import {
   runProbe,
   finalizeScenario,
   validatePlaywright,
+  validatePlaywrightBatches,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -31,6 +32,16 @@ const challengeRowMaps = challengeRows.map((row) => ({
 }));
 
 const readChallengeStateScript = `
+  const knownLabels = [
+    'First Name',
+    'Last Name',
+    'Company Name',
+    'Role in Company',
+    'Address',
+    'Email',
+    'Phone Number',
+  ];
+
   function normalizeLabel(label) {
     return String(label || '').replace(/\\s+/g, ' ').trim();
   }
@@ -76,11 +87,20 @@ const readChallengeStateScript = `
   }
 
   const fields = currentFields();
+  const dedupedFields = [];
+  const seen = new Set();
+  for (const field of fields) {
+    if (!knownLabels.includes(field.label) || seen.has(field.label)) {
+      continue;
+    }
+    seen.add(field.label);
+    dedupedFields.push(field);
+  }
   return {
     round: currentRound(),
-    signature: fields.map((field) => field.label).join('|'),
+    signature: dedupedFields.map((field) => field.label).join('|'),
     successText: document.body.textContent.replace(/\\s+/g, ' ').trim(),
-    fields,
+    fields: dedupedFields,
   };
 `;
 
@@ -144,7 +164,7 @@ async function waitForChallengeAdvance(context, sessionId, previousState, timeou
   throw new Error('The RPA Challenge page never advanced to the next round.');
 }
 
-function buildRowActions(state, row) {
+function buildRowActionBatches(state, row) {
   const actions = state.fields.map((field) => {
     const value = row[field.label];
     if (value === undefined) {
@@ -164,13 +184,14 @@ function buildRowActions(state, row) {
     return action;
   });
 
-  actions.push({
+  const submitAction = {
     type: 'click',
     locator: { strategy: 'role', value: { role: 'button', name: 'Submit' } },
     fallbackLocators: [{ strategy: 'css', value: 'input[type="submit"]' }],
-  });
+  };
 
-  return actions;
+  const midpoint = Math.ceil(actions.length / 2);
+  return [actions.slice(0, midpoint), [...actions.slice(midpoint), submitAction]];
 }
 
 export const scenario = {
@@ -187,12 +208,7 @@ export const scenario = {
         let currentState = await waitForChallengeFields(context, sessionId);
 
         for (const row of challengeRowMaps) {
-          await validatePlaywright(
-            context,
-            sessionId,
-            `Fill and submit challenge row for ${row['First Name']}`,
-            buildRowActions(currentState, row)
-          );
+          await validatePlaywrightBatches(context, sessionId, `Fill and submit challenge row for ${row['First Name']}`, buildRowActionBatches(currentState, row));
 
           const transition = await waitForChallengeAdvance(context, sessionId, currentState);
           completedRows.push(row['First Name']);

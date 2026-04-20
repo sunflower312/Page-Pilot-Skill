@@ -3,25 +3,30 @@ import {
   runProbe,
   finalizeScenario,
   validatePlaywright,
+  validatePlaywrightBatches,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
 
-function registrationActions(username) {
+function registrationActionBatches(username) {
   return [
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.firstName' }, value: 'Bench' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.lastName' }, value: 'Transfer' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.street' }, value: '7 Transfer Road' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.city' }, value: 'Flowtown' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.state' }, value: 'CA' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.zipCode' }, value: '90001' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.phoneNumber' }, value: '5553334444' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.ssn' }, value: '444556666' },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.username' }, value: username },
-    { type: 'fill', locator: { strategy: 'css', value: '#customer\\.password' }, value: 'secret123' },
-    { type: 'fill', locator: { strategy: 'css', value: '#repeatedPassword' }, value: 'secret123' },
-    { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Register' } } },
-    { type: 'assert_text', locator: { strategy: 'css', value: '#leftPanel' }, value: 'Open New Account' },
+    [
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.firstName' }, value: 'Bench' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.lastName' }, value: 'Transfer' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.street' }, value: '7 Transfer Road' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.city' }, value: 'Flowtown' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.state' }, value: 'CA' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.address\\.zipCode' }, value: '90001' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.phoneNumber' }, value: '5553334444' },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.ssn' }, value: '444556666' },
+    ],
+    [
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.username' }, value: username },
+      { type: 'fill', locator: { strategy: 'css', value: '#customer\\.password' }, value: 'secret123' },
+      { type: 'fill', locator: { strategy: 'css', value: '#repeatedPassword' }, value: 'secret123' },
+      { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Register' } } },
+      { type: 'assert_text', locator: { strategy: 'css', value: '#leftPanel' }, value: 'Open New Account' },
+    ],
   ];
 }
 
@@ -128,11 +133,11 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the ParaBank registration page for the transfer-funds flow', 'brief');
-        await validatePlaywright(
+        await validatePlaywrightBatches(
           context,
           sessionId,
           'Register a new ParaBank demo customer for the transfer flow',
-          registrationActions('{{pagePilot.uniqueUsername:parabank-transfer}}')
+          registrationActionBatches('{{pagePilot.uniqueUsername:parabank-transfer}}')
         );
         await runProbe(
           context,

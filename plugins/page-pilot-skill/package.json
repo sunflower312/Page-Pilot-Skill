@@ -3,14 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "node --test",
+    "test": "npm run test:unit",
+    "test:ci": "npm run lint && npm run test && npm run test:integration && npm run benchmark:test",
     "test:unit": "node --test tests/unit/*.test.js",
-    "test:integration": "node --test tests/integration/*.test.js",
+    "test:integration": "node scripts/doctor.js --require-browser --quiet && node --test tests/integration/*.test.js",
+    "test:all": "npm run test:ci && npm run benchmark",
     "benchmark": "node scripts/run-benchmarks.js",
     "benchmark:test": "node --test benchmarks/lib/*.check.js",
     "benchmark:list": "node scripts/run-benchmarks.js --list",
-    "lint": "node --check scripts/mcp-server.js",
+    "lint": "node scripts/lint.js",
+    "doctor": "node scripts/doctor.js",
+    "setup": "npm run install:chromium && npm run doctor",
     "install:codex": "node scripts/install-codex-mcp.js",
     "install:chromium": "npx playwright install chromium"
   },

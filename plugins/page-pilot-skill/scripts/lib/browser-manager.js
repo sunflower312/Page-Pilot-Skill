@@ -102,9 +102,6 @@ export class BrowserManager {
         expiresAt: now + this.idleMs,
         activeOperations: 0,
         validationHistory: [],
-        strategyMemory: null,
-        lastActionFailure: null,
-        lastWorkflowSummary: null,
       };
       this.sessions.set(id, session);
       return session;

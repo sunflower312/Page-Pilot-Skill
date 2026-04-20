@@ -59,7 +59,7 @@ function createFakeClient(log, options = {}) {
 }
 
 test('runBenchmarks executes only qualified scenarios and writes acceptance reports', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-'));
   const calls = [];
   const registry = [
     {
@@ -187,8 +187,115 @@ test('runBenchmarks executes only qualified scenarios and writes acceptance repo
   assert.equal(json.results[0].executable.sourcePath, null);
 });
 
+test('runBenchmarks keeps cumulative code-quality metrics from the final generated batch and aggregates batch-level status flags', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-batched-'));
+  const calls = [];
+  const run = await runBenchmarks({
+    registry: [
+      {
+        id: 'batched-site',
+        name: 'Batched Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/batched',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/batched'], notes: [] },
+        scenarios: [
+          {
+            id: 'batched-flow',
+            title: 'Batched flow',
+            status: 'qualified',
+            module: './demo/batched-flow.js',
+            tags: ['code-quality'],
+            guide: {
+              steps: ['Validate a long flow in batches'],
+              expectedResult: 'Scenario reports cumulative code-quality state.',
+              failureModes: ['Only the last batch contributes to scenario metrics.'],
+            },
+            metadata: { codeQualityEligible: true },
+          },
+        ],
+      },
+    ],
+    outputDir,
+    clientFactory: async () => createFakeClient(calls),
+    moduleLoader: async (moduleId) => {
+      if (moduleId !== './demo/batched-flow.js') {
+        throw new Error(`Unexpected module request: ${moduleId}`);
+      }
+
+      return {
+        scenario: {
+          async run(context) {
+            context.recordStep('Validate long flow (1/2)', 'passed', {
+              codeQuality: {
+                locatorCount: 4,
+                semanticLocatorCount: 3,
+                cssFallbackCount: 1,
+                uniqueLocatorHitCount: 3,
+                semanticLocatorRatio: 0.75,
+                cssFallbackRatio: 0.25,
+                uniqueLocatorHitRate: 0.75,
+                firstValidationPassed: false,
+                evidenceScope: 'single_validation_batch',
+                generatedValidationPassed: false,
+                generatedValidationScope: 'not_attempted',
+                repaired: true,
+                codeLineCount: 18,
+              },
+              generatedValidation: {
+                ok: null,
+                skipped: true,
+                reason: 'intermediate_batch_validation',
+              },
+            });
+            context.recordStep('Validate long flow (2/2)', 'passed', {
+              codeQuality: {
+                locatorCount: 9,
+                semanticLocatorCount: 8,
+                cssFallbackCount: 1,
+                uniqueLocatorHitCount: 8,
+                semanticLocatorRatio: 0.89,
+                cssFallbackRatio: 0.11,
+                uniqueLocatorHitRate: 0.89,
+                firstValidationPassed: true,
+                evidenceScope: 'cumulative_session_validation_evidence',
+                generatedValidationPassed: true,
+                generatedValidationScope: 'cumulative_generated_plan',
+                repaired: false,
+                codeLineCount: 27,
+              },
+              generatedValidation: {
+                ok: true,
+                skipped: false,
+                reason: null,
+              },
+            });
+
+            return {
+              status: 'passed',
+              summary: 'Batched flow completed.',
+            };
+          },
+        },
+      };
+    },
+  });
+
+  assert.equal(run.results.length, 1);
+  assert.equal(run.results[0].status, 'passed');
+  assert.equal(run.results[0].metrics.codeQuality.locatorCount, 9);
+  assert.equal(run.results[0].metrics.codeQuality.semanticLocatorRatio, 0.89);
+  assert.equal(run.results[0].metrics.codeQuality.evidenceScope, 'cumulative_session_validation_evidence');
+  assert.equal(run.results[0].metrics.codeQuality.firstValidationPassed, false);
+  assert.equal(run.results[0].metrics.codeQuality.generatedValidationPassed, true);
+  assert.equal(run.results[0].metrics.codeQuality.generatedValidationScope, 'cumulative_generated_plan');
+  assert.equal(run.results[0].metrics.codeQuality.repaired, true);
+  assert.equal(run.results[0].metrics.codeQuality.validationBatchCount, 2);
+  assert.equal(run.results[0].metrics.codeQuality.generatedValidationAttemptCount, 1);
+});
+
 test('runBenchmarks skips missing modules without crashing when no client was created yet', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-missing-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-missing-'));
   const run = await runBenchmarks({
     registry: [
       {
@@ -230,7 +337,7 @@ test('runBenchmarks skips missing modules without crashing when no client was cr
 });
 
 test('runBenchmarks excludes unavailable external sites from acceptance and coverage denominators', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-unavailable-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-unavailable-'));
   const calls = [];
   const run = await runBenchmarks({
     registry: [
@@ -388,7 +495,7 @@ test('buildCoverageMatrix skips code-quality ratio gates when every eligible sce
 });
 
 test('runBenchmarks keeps tool-level internal error pages as failures unless a scenario explicitly reclassifies them', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-tool-unavailable-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-tool-unavailable-'));
   const run = await runBenchmarks({
     registry: [
       {
@@ -468,7 +575,7 @@ test('runBenchmarks keeps tool-level internal error pages as failures unless a s
 });
 
 test('runBenchmarks fails the scenario when browser_close reports an application-level failure', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-close-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-close-'));
   const calls = [];
   const run = await runBenchmarks({
     registry: [
@@ -527,7 +634,7 @@ test('runBenchmarks fails the scenario when browser_close reports an application
 });
 
 test('runBenchmarks counts a started scenario as executed even when the scenario throws', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-thrown-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-thrown-'));
   const run = await runBenchmarks({
     registry: [
       {
@@ -689,7 +796,7 @@ test('real-site registry keeps qualified scenarios executable and documented', (
 
 test('real-site registry satisfies beta benchmark coverage requirements', () => {
   const coverageBaseline = buildCoverageMatrix(siteRegistry, []);
-  assert.equal(coverageBaseline.summary.codeQualityEligibleScenarioCount, 22);
+  assert.equal(coverageBaseline.summary.codeQualityEligibleScenarioCount, 21);
   const isCodeQualityEligible = (site, scenario) => {
     if (typeof scenario.metadata?.codeQualityEligible === 'boolean') {
       return scenario.metadata.codeQualityEligible;
@@ -768,7 +875,7 @@ test('benchmarkRunSucceeded requires both acceptance and beta gate success', () 
 });
 
 test('runBenchmarks preserves the primary scenario failure when withSession cleanup fails first', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-primary-cleanup-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-primary-cleanup-'));
   const calls = [];
   const run = await runBenchmarks({
     registry: [
@@ -831,7 +938,7 @@ test('runBenchmarks preserves the primary scenario failure when withSession clea
 });
 
 test('benchmark CLI exits non-zero when filters only match non-runnable registry entries', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-cli-'));
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-cli-'));
   const result = spawnSync(
     'node',
     ['scripts/run-benchmarks.js', '--site', 'parabank', '--scenario', 'bill-pay', '--format', 'json', '--output-dir', outputDir],

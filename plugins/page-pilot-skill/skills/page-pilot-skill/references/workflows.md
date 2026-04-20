@@ -23,4 +23,4 @@
 2. Scan the structure
 3. Run `fill -> click -> wait_for -> assert_text` through `browser_validate_playwright`
 4. Generate Playwright only after the form result is backed by scan or validation evidence
-5. Save storage state if the resulting session should be reused
+5. If you already have a reusable storage-state file, pass it back into `browser_open` with `storageStatePath`; this public contract does not expose a separate save tool

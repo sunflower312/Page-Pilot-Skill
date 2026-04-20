@@ -8,6 +8,85 @@ function summarizeObservation(observation = {}) {
   };
 }
 
+function splitValidationBatches(steps = [], maxSteps = 12) {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return [];
+  }
+
+  const batches = [];
+  for (let index = 0; index < steps.length; index += maxSteps) {
+    batches.push(steps.slice(index, index + maxSteps));
+  }
+  return batches;
+}
+
+function buildGeneratedValidationMetrics(batchResults = []) {
+  const totals = batchResults.reduce(
+    (accumulator, result) => {
+      const metrics = result?.validation?.metrics ?? {};
+      accumulator.locatorCount += metrics.locatorCount ?? 0;
+      accumulator.semanticLocatorCount += metrics.semanticLocatorCount ?? 0;
+      accumulator.cssFallbackCount += metrics.cssFallbackCount ?? 0;
+      accumulator.uniqueLocatorHitCount += metrics.uniqueLocatorHitCount ?? 0;
+      return accumulator;
+    },
+    {
+      locatorCount: 0,
+      semanticLocatorCount: 0,
+      cssFallbackCount: 0,
+      uniqueLocatorHitCount: 0,
+    }
+  );
+
+  return {
+    ...totals,
+    semanticLocatorRatio:
+      totals.locatorCount === 0 ? null : Number((totals.semanticLocatorCount / totals.locatorCount).toFixed(2)),
+    cssFallbackRatio:
+      totals.locatorCount === 0 ? null : Number((totals.cssFallbackCount / totals.locatorCount).toFixed(2)),
+    uniqueLocatorHitRate:
+      totals.locatorCount === 0 ? null : Number((totals.uniqueLocatorHitCount / totals.locatorCount).toFixed(2)),
+  };
+}
+
+async function validateGeneratedPlan(context, sessionId, generatedPlan = []) {
+  const batches = splitValidationBatches(generatedPlan);
+  if (batches.length === 0) {
+    const error = new Error('Generated Playwright response did not include a non-empty generatedPlan');
+    error.code = 'GENERATED_PLAN_MISSING';
+    throw error;
+  }
+
+  const batchResults = [];
+
+  for (const batch of batches) {
+    const result = await context.callTool('browser_validate_playwright', {
+      sessionId,
+      steps: batch,
+    });
+
+    if (result.ok !== true) {
+      return {
+        ...result,
+        ok: false,
+      };
+    }
+
+    batchResults.push(result);
+  }
+
+  const lastResult = batchResults.at(-1);
+  return {
+    ...lastResult,
+    ok: true,
+    validation: {
+      ...(lastResult?.validation ?? {}),
+      metrics: buildGeneratedValidationMetrics(batchResults),
+    },
+    batchCount: batchResults.length,
+  };
+}
+
 function buildCodeQuality({
   validation = null,
   generated = null,
@@ -37,6 +116,7 @@ function buildCodeQuality({
     0;
 
   return {
+    evidenceScope: generated ? 'cumulative_session_validation_evidence' : 'single_validation_batch',
     semanticLocatorRatio:
       generated?.metrics?.semanticLocatorRatio ?? validation?.validation?.metrics?.semanticLocatorRatio ?? null,
     cssFallbackRatio:
@@ -49,6 +129,7 @@ function buildCodeQuality({
     uniqueLocatorHitCount,
     firstValidationPassed,
     generatedValidationPassed: generatedValidation?.ok === true,
+    generatedValidationScope: generatedValidation ? 'cumulative_generated_plan' : 'not_attempted',
     repaired,
     codeLineCount: generated?.metrics?.codeLineCount ?? null,
   };
@@ -87,7 +168,7 @@ export async function scanPage(context, sessionId, title, detailLevel = 'brief')
   return response;
 }
 
-export async function validatePlaywright(context, sessionId, title, steps) {
+export async function validatePlaywright(context, sessionId, title, steps, options = {}) {
   let validation = await context.callTool('browser_validate_playwright', { sessionId, steps });
   let repair = null;
   const firstValidationPassed = validation.ok === true;
@@ -122,41 +203,46 @@ export async function validatePlaywright(context, sessionId, title, steps) {
     throw error;
   }
 
-  const generated = await context.callTool('browser_generate_playwright', {
-    sessionId,
-    testName: `${context.site.id}-${context.scenario.id}`,
-    includeImports: false,
-    includeTestWrapper: false,
-  });
-  const generatedStartUrl = generated.source?.startUrl ?? context.scenario.entryUrl ?? context.site.baseUrl;
-  const generatedSession = await context.openSession({ url: generatedStartUrl });
-  let generatedValidation;
+  let generated = null;
+  let generatedValidation = {
+    ok: null,
+    skipped: true,
+    reason: 'intermediate_batch_validation',
+  };
 
-  try {
-    generatedValidation = await context.callTool('browser_validate_playwright_code', {
-      sessionId: generatedSession.sessionId,
-      code: generated.code,
+  if (options.skipGeneratedValidation !== true) {
+    generated = await context.callTool('browser_generate_playwright', {
+      sessionId,
+      testName: `${context.site.id}-${context.scenario.id}`,
+      includeImports: false,
+      includeTestWrapper: false,
     });
-  } finally {
-    await context.closeSession(generatedSession.sessionId);
+    const generatedStartUrl = generated.source?.startUrl ?? context.scenario.entryUrl ?? context.site.baseUrl;
+    const generatedSession = await context.openSession({ url: generatedStartUrl });
+
+    try {
+      generatedValidation = await validateGeneratedPlan(context, generatedSession.sessionId, generated.generatedPlan);
+    } finally {
+      await context.closeSession(generatedSession.sessionId);
+    }
   }
 
   const codeQuality = buildCodeQuality({
     validation,
     generated,
-    generatedValidation,
+    generatedValidation: generatedValidation.ok === true ? generatedValidation : null,
     firstValidationPassed,
     repaired: validation.validation?.repaired === true,
   });
 
-  if (generatedValidation.ok !== true) {
+  if (generatedValidation.ok === false) {
     context.recordStep(title, 'failed', {
       stepCount: steps.length,
       finalUrl: validation.source?.finalUrl ?? null,
       finalTitle: validation.source?.finalTitle ?? null,
       observation: summarizeObservation(validation.observation),
       codeQuality,
-      generatedCode: generated.code,
+      generatedCode: generated?.code ?? null,
       generatedValidation: {
         ok: false,
         failureKind: generatedValidation.failureKind ?? generatedValidation.error?.code ?? null,
@@ -175,9 +261,11 @@ export async function validatePlaywright(context, sessionId, title, steps) {
     finalTitle: validation.source?.finalTitle ?? null,
     observation: summarizeObservation(validation.observation),
     codeQuality,
-    generatedCode: generated.code,
+    generatedCode: generated?.code ?? null,
     generatedValidation: {
       ok: generatedValidation.ok,
+      skipped: generatedValidation.skipped === true,
+      reason: generatedValidation.reason ?? null,
       failureKind: generatedValidation.failureKind ?? null,
       stateChanged: generatedValidation.stateChanged ?? null,
     },
@@ -192,11 +280,24 @@ export async function validatePlaywright(context, sessionId, title, steps) {
   };
 }
 
+export async function validatePlaywrightBatches(context, sessionId, title, batches) {
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index];
+    await validatePlaywright(
+      context,
+      sessionId,
+      batches.length === 1 ? title : `${title} (${index + 1}/${batches.length})`,
+      batch,
+      { skipGeneratedValidation: index < batches.length - 1 }
+    );
+  }
+}
+
 export async function runProbe(context, sessionId, title, probeOrSource, summarizeData = null, options = {}) {
   const defaultTimeoutMs = typeof probeOrSource === 'string' ? 20000 : 3000;
   const response =
     typeof probeOrSource === 'string'
-      ? await context.callTool('browser_probe_script', {
+      ? await context.callTool('browser_probe_script_internal', {
           sessionId,
           source: probeOrSource,
           timeoutMs: options.timeoutMs ?? defaultTimeoutMs,

@@ -52,7 +52,7 @@ When writing or fixing Playwright:
 
 1. Run `browser_scan` first so code generation starts from real page evidence.
 2. When the target interaction is still uncertain, run `browser_validate_playwright` first so the session has verified locator and stability data.
-3. Call `browser_generate_playwright` to generate Playwright TypeScript from the latest validated session evidence.
+3. Call `browser_generate_playwright` to generate Playwright TypeScript from the current session's accumulated passed validation evidence.
 4. Prefer `page.getByRole(...)`, `page.getByLabel(...)`, `page.getByText(..., { exact: true })`, `page.getByPlaceholder(...)`, and `page.getByTestId(...)`.
 5. Fall back to CSS only when higher-signal locators are not available.
 6. Keep actions minimal and explicit.
@@ -66,8 +66,8 @@ When writing or fixing Playwright:
 - `browser_validate_playwright` should validate a concrete hypothesis, not replay a huge end-to-end script.
 - `browser_validate_playwright` supports `fallbackLocators` and optional `stability` config on locatable actions. It returns per-step `verification`, `locatorRanking`, `assertionPlan`, and `stability` metadata.
 - `browser_validate_playwright` supports `navigate`, `click`, `fill`, `press`, `select`, `check`, `wait_for`, `assert_text`, `assert_url`, and `capture`.
-- `browser_repair_playwright` is bounded: it may re-rank candidates, swap locators, and relax waits, but it does not autonomously explore a new workflow.
-- `browser_generate_playwright` uses the latest validated session evidence in the current session. If no validated evidence exists, treat that as a hard stop for code generation.
+- `browser_repair_playwright` is bounded: it may re-rank candidates, swap locators, and fill in missing default stability settings for locatable actions, but it does not autonomously explore a new workflow or rewrite assertion intent.
+- `browser_generate_playwright` uses the current session's accumulated passed validation evidence. If no validated evidence exists, treat that as a hard stop for code generation.
 - `browser_capture_screenshot` is for visual confirmation.
 - `browser_snapshot_dom` is for DOM evidence and debugging hidden structure.
 - Always close sessions with `browser_close` when the workflow is done.
