@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildObservation, captureObservationSnapshot, hasMainDocumentTransition } from '../../scripts/lib/observation.js';
 
-const DOCUMENT_IDENTITY_KEY = '__agentBrowserHeadlessDocumentIdentity__';
+const DOCUMENT_IDENTITY_KEY = '__pagePilotDocumentIdentity__';
 
 function setGlobalValue(name, value) {
   Object.defineProperty(globalThis, name, {

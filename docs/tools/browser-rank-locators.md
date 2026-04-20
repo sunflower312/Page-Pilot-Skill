@@ -77,6 +77,14 @@
       },
       "locatorChoices": [
         {
+          "locator": {
+            "strategy": "role",
+            "value": {
+              "role": "textbox",
+              "name": "Email",
+              "exact": true
+            }
+          },
           "locatorType": "role",
           "matchCount": 1,
           "playwrightExpression": "page.getByRole(\"textbox\", { name: \"Email\", exact: true })",
@@ -85,6 +93,10 @@
           "confidence": "high"
         },
         {
+          "locator": {
+            "strategy": "label",
+            "value": "Email"
+          },
           "locatorType": "label",
           "matchCount": 1,
           "playwrightExpression": "page.getByLabel(\"Email\")",
@@ -144,9 +156,9 @@
 以下内容必须保持一致：
 
 - `docs/contracts.md`
-- `skills/page-pilot-skill/references/locator-strategy.md`
-- `scripts/tools/analysis-tools.js`
-- `scripts/lib/locator-ranking.js`
-- `scripts/lib/semantic-target-ranking.js`
+- `plugins/page-pilot-skill/skills/page-pilot-skill/references/locator-strategy.md`
+- `plugins/page-pilot-skill/scripts/tools/analysis-tools.js`
+- `plugins/page-pilot-skill/scripts/lib/locator-ranking.js`
+- `plugins/page-pilot-skill/scripts/lib/semantic-target-ranking.js`
 
 如果排序顺序、候选字段或 CSS 兜底策略发生变化，上述文件必须在同一次改动中同步更新。

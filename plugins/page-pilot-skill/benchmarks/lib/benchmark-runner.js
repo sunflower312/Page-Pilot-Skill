@@ -115,6 +115,25 @@ function createExternalSiteUnavailableError(response, site, scenario) {
   return error;
 }
 
+function isTransientOpenFailure(response) {
+  const message = response?.error?.message ?? '';
+  if (typeof message !== 'string') {
+    return false;
+  }
+
+  return (
+    message.includes('Timeout') ||
+    message.includes('net::ERR_CONNECTION_RESET') ||
+    message.includes('net::ERR_CONNECTION_ABORTED') ||
+    message.includes('net::ERR_CONNECTION_CLOSED') ||
+    message.includes('net::ERR_HTTP2_PROTOCOL_ERROR')
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function closeSessionWithContract(client, sessionId) {
   const response = await client.closeSession(sessionId);
   if (response === false || response?.ok === false) {
@@ -183,18 +202,32 @@ function createScenarioContext({ site, scenario, client, stepRecorder, metrics, 
       return response;
     },
     async openSession(options = {}) {
-      metrics.toolCalls += 1;
-      const response = await client.openSession({ url: scenario.entryUrl ?? site.baseUrl, ...options });
-      if (response?.ok === false || !response?.sessionId) {
-        throw createToolFailure('browser_open', response);
-      }
-      if (response?.title === 'Application Error') {
-        throw createExternalSiteUnavailableError(response, site, scenario);
+      const openOptions = { url: scenario.entryUrl ?? site.baseUrl, ...options };
+      let lastResponse = null;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        metrics.toolCalls += 1;
+        const response = await client.openSession(openOptions);
+        lastResponse = response;
+
+        if (response?.ok !== false && response?.sessionId) {
+          if (response?.title === 'Application Error') {
+            throw createExternalSiteUnavailableError(response, site, scenario);
+          }
+
+          activeSessions.add(response.sessionId);
+          metrics.sessionsOpened += 1;
+          return response;
+        }
+
+        if (!isTransientOpenFailure(response) || attempt === 2) {
+          throw createToolFailure('browser_open', response);
+        }
+
+        await sleep(250 * (attempt + 1));
       }
 
-      activeSessions.add(response.sessionId);
-      metrics.sessionsOpened += 1;
-      return response;
+      throw createToolFailure('browser_open', lastResponse);
     },
     async closeSession(sessionId) {
       if (!activeSessions.has(sessionId)) {

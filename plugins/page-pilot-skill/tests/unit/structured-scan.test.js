@@ -9,6 +9,47 @@ function createPageLike(fixtureData) {
   };
 }
 
+function createRoleFallbackPageLike(fixtureData) {
+  const actionableTarget = {
+    isVisible: async () => true,
+    isEnabled: async () => true,
+    isEditable: async () => true,
+  };
+  const inactiveTarget = {
+    isVisible: async () => false,
+    isEnabled: async () => false,
+    isEditable: async () => false,
+  };
+  const createLocator = (count, target) => ({
+    count: async () => count,
+    first() {
+      return target;
+    },
+  });
+
+  return {
+    evaluate: async (fn, detailLevel) => fn(detailLevel, fixtureData),
+    getByRole(_role, options = {}) {
+      return options.exact === false ? createLocator(1, actionableTarget) : createLocator(0, inactiveTarget);
+    },
+    getByLabel() {
+      return createLocator(0, inactiveTarget);
+    },
+    getByText() {
+      return createLocator(0, inactiveTarget);
+    },
+    getByPlaceholder() {
+      return createLocator(0, inactiveTarget);
+    },
+    getByTestId() {
+      return createLocator(0, inactiveTarget);
+    },
+    locator() {
+      return createLocator(0, inactiveTarget);
+    },
+  };
+}
+
 function createFixtureData() {
   return {
     title: 'Page Pilot Skill Complex Fixture',
@@ -131,8 +172,12 @@ function createFixtureData() {
         {
           role: 'textbox',
           name: 'Email',
+          nameSource: 'label',
           label: 'Email',
+          labelSource: 'label',
           text: 'Email',
+          roleSource: 'native_tag',
+          descriptionSource: 'none',
           placeholder: 'email@example.com',
           css: '#email',
           visible: true,
@@ -591,7 +636,7 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   assert.equal(brief.document.shadowHosts.length, 1);
   assert.equal(brief.summary.retainedInteractiveCount, 6);
   assert.equal(brief.summary.truncated, true);
-  assert.equal(brief.summary.discoveredInteractiveCount, undefined);
+  assert.equal(brief.summary.discoveredInteractiveCount, 18);
   assert.equal(brief.summary.headings.length, 3);
   assert.equal(brief.summary.lists.length, 2);
   assert.equal(brief.hints.formFields.length, 2);
@@ -632,10 +677,15 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   assert.equal(full.hints.possibleResultRegions.length, 2);
   assert.equal(full.hints.context.hasFrames, true);
   assert.equal(full.hints.context.hasShadowHosts, true);
-  assert.equal(full.schemaVersion, 'scan.v2');
+  assert.equal(full.schemaVersion, 'scan.v3');
+  assert.equal(full.focus.kind, 'generic');
   assert.deepEqual(full.document.regions.main, [{ name: 'main' }]);
   assert.deepEqual(full.document.regions.forms, [{ name: 'support-form' }]);
   assert.equal(full.document.regions.shadowRoots[0].css, '#shadow-host');
+  assert.equal(full.summary.coverage.discoveredByGroup.buttons >= full.summary.coverage.retainedByGroup.buttons, true);
+  assert.equal(full.summary.coverage.omittedByGroup.buttons >= 0, true);
+  assert.equal(Array.isArray(full.collections.tables), true);
+  assert.equal(full.hints.primaryCollection.kind, 'list');
 
   const emailField = full.interactives.inputs.find((entry) => entry.css === '#email');
   assert.equal(emailField.accessibleName, 'Email');
@@ -645,6 +695,9 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
     label: 'Email',
     placeholder: 'email@example.com',
     testId: '',
+    inputType: '',
+    href: '',
+    controlType: '',
   });
   assert.deepEqual(emailField.state, {
     disabled: false,
@@ -667,6 +720,14 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   });
   assert.deepEqual(emailField.localContext.form, { name: 'support-form' });
   assert.equal(emailField.localContext.dialog, null);
+  assert.deepEqual(emailField.provenance, {
+    roleSource: 'native_tag',
+    nameSource: 'label',
+    labelSource: 'label',
+    descriptionSource: 'none',
+    origin: 'document',
+  });
+  assert.equal(emailField.origin.fromShadow, false);
   assert.equal(emailField.geometry, null);
   assert.equal(emailField.recommendedLocators[0].locator.strategy, 'role');
   assert.equal(emailField.recommendedLocators[0].confidence, 'high');
@@ -685,14 +746,18 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   });
   assert.deepEqual(emailField.confidence, {
     level: 'high',
-    score: 0.91,
-    reasons: ['semantic_role', 'label', 'in_form_context'],
+    score: 0.99,
+    reasons: ['semantic_role', 'label', 'strong_name_source', 'strong_label_source', 'in_form_context'],
   });
 });
 
 test('collectStructuredPageData prioritizes workflow actions over page chrome in standard scans', async () => {
   const fixtureData = createWorkflowPriorityFixtureData();
   const standard = await collectStructuredPageData(createPageLike(fixtureData), { detailLevel: 'standard' });
+  const navigationFocused = await collectStructuredPageData(createPageLike(fixtureData), {
+    detailLevel: 'brief',
+    focus: { kind: 'navigation' },
+  });
 
   assert.equal(standard.interactives.buttons.some((entry) => entry.css === '#start-plan-button'), true);
   assert.equal(standard.interactives.buttons.some((entry) => entry.css === '#acct-confirmation-next'), true);
@@ -700,6 +765,8 @@ test('collectStructuredPageData prioritizes workflow actions over page chrome in
   assert.equal(standard.interactives.buttons.some((entry) => entry.css === '#chrome-action-12'), false);
   assert.equal(standard.interactives.links.some((entry) => entry.css === '#chrome-link-6'), false);
   assert.equal(standard.hints.primaryAction?.label, 'Next');
+  assert.equal(navigationFocused.focus.kind, 'navigation');
+  assert.equal(navigationFocused.interactives.links.some((entry) => entry.css === '#resume-plan-link'), true);
 });
 
 test('collectStructuredPageData prefers the active dialog action over the background form action', async () => {
@@ -729,4 +796,60 @@ test('collectStructuredPageData can pick a workflow link as primaryAction when b
     strategy: 'role',
     value: { role: 'link', name: 'Resume plan', exact: true },
   });
+});
+
+test('collectStructuredPageData rewrites verified role fallbacks back into scan locators and hints', async () => {
+  const scan = await collectStructuredPageData(
+    createRoleFallbackPageLike({
+      title: 'Role fallback fixture',
+      url: 'http://fixture.local/role-fallback.html',
+      text: 'Continue to review the request.',
+      lang: 'en',
+      description: 'Role locator fallback fixture.',
+      headings: [{ level: 1, text: 'Role fallback fixture', css: 'h1' }],
+      lists: [],
+      interactives: {
+        buttons: [
+          {
+            role: 'button',
+            name: 'Continue',
+            text: 'Continue',
+            css: '#continue',
+            visible: true,
+            highValue: true,
+            domIndex: 0,
+            withinMain: true,
+          },
+        ],
+        links: [],
+        inputs: [],
+        selects: [],
+        textareas: [],
+      },
+      landmarks: {
+        forms: [],
+        dialogs: [],
+        mains: [{ name: 'main' }],
+      },
+      dialogs: [],
+      frames: [],
+      shadowHosts: [],
+    }),
+    {
+      detailLevel: 'brief',
+      verification: {
+        enabled: true,
+        maxPerElement: 1,
+        groups: ['buttons'],
+      },
+    }
+  );
+
+  const button = scan.interactives.buttons[0];
+  assert.equal(button.recommendedLocators[0].locator.strategy, 'role');
+  assert.equal(button.recommendedLocators[0].locator.value.exact, false);
+  assert.equal(button.recommendedLocators[0].playwrightExpression, 'page.getByRole("button", { name: "Continue", exact: false })');
+  assert.equal(button.preferredLocator.value.exact, false);
+  assert.equal(button.locators[0].value.exact, false);
+  assert.equal(scan.hints.primaryAction?.locator?.value?.exact, false);
 });

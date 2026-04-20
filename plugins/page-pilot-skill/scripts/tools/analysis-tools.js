@@ -8,6 +8,37 @@ import { buildLocatorChoices } from './locator-choices.js';
 import { handleTool, withSessionOrThrow } from './tool-helpers.js';
 import { toPlaywrightExpression } from '../lib/playwright-locator-expression.js';
 
+export function mergeVerifiedLocatorChoices(match = {}, locatorChoices = []) {
+  const preferredChoice = locatorChoices[0] ?? null;
+  const preferredLocator = preferredChoice?.locator ?? match.preferredLocator ?? null;
+  const fallbackLocators = locatorChoices.slice(1).map((choice) => choice.locator).filter(Boolean);
+  const element =
+    match.element && typeof match.element === 'object'
+      ? {
+          ...match.element,
+          recommendedLocators: locatorChoices,
+          preferredLocator,
+          fallbackLocators,
+        }
+      : match.element ?? null;
+
+  return {
+    ...match,
+    element,
+    recommendedLocators: locatorChoices,
+    preferredLocator,
+    fallbackLocators,
+    locatorChoices,
+    matchCount: preferredChoice?.matchCount ?? null,
+    locatorType: preferredChoice?.locatorType ?? preferredLocator?.strategy ?? null,
+    playwrightExpression:
+      preferredChoice?.playwrightExpression ??
+      (preferredLocator ? toPlaywrightExpression(preferredLocator) : null),
+    stabilityReason: preferredChoice?.stabilityReason ?? match.reasons?.[0] ?? null,
+    fallbackReason: preferredChoice?.fallbackReason ?? (preferredLocator?.strategy === 'css' ? 'css_fallback' : null),
+  };
+}
+
 export function registerAnalysisTools(server, { browserManager }) {
   server.registerTool(
     'browser_scan',
@@ -16,12 +47,58 @@ export function registerAnalysisTools(server, { browserManager }) {
       inputSchema: {
         sessionId: z.string(),
         detailLevel: z.enum(['brief', 'standard', 'full']).default('standard').optional(),
+        focus: z
+          .object({
+            kind: z
+              .enum(['generic', 'form_fill', 'dialog', 'search_results', 'table_actions', 'navigation', 'content_extract'])
+              .default('generic')
+              .optional(),
+            targetText: z.string().min(1).optional(),
+          })
+          .optional(),
+        includeSpecializedControls: z.boolean().default(false).optional(),
+        verification: z
+          .object({
+            enabled: z.boolean().default(false).optional(),
+            maxPerElement: z.number().int().positive().max(2).default(1).optional(),
+            groups: z
+              .array(
+                z.enum([
+                  'buttons',
+                  'links',
+                  'inputs',
+                  'selects',
+                  'textareas',
+                  'checkboxes',
+                  'radios',
+                  'switches',
+                  'sliders',
+                  'tabs',
+                  'options',
+                  'menuItems',
+                  'fileInputs',
+                  'dateInputs',
+                ])
+              )
+              .min(1)
+              .optional(),
+          })
+          .optional(),
       },
     },
-    async ({ sessionId, detailLevel = 'standard' }) => {
+    async ({ sessionId, detailLevel = 'standard', focus, includeSpecializedControls = false, verification }) => {
       return handleTool(async () => {
         return await withSessionOrThrow(browserManager, sessionId, async (session) => {
-          return await collectStructuredPageData(session.page, { detailLevel });
+          const scan = await collectStructuredPageData(session.page, {
+            detailLevel,
+            focus,
+            includeSpecializedControls,
+            verification,
+          });
+          return {
+            ok: true,
+            ...scan,
+          };
         });
       }, 'BROWSER_SCAN_FAILED');
     }
@@ -41,25 +118,16 @@ export function registerAnalysisTools(server, { browserManager }) {
     async ({ sessionId, target, detailLevel = 'standard', limit = 5 }) => {
       return handleTool(async () => {
         return await withSessionOrThrow(browserManager, sessionId, async (session) => {
-          const scan = await collectStructuredPageData(session.page, { detailLevel });
+          const scan = await collectStructuredPageData(session.page, {
+            detailLevel,
+            includeSpecializedControls: true,
+          });
           const ranking = rankSemanticTarget(scan, target, { limit });
           const matches = [];
 
           for (const match of ranking.matches) {
             const locatorChoices = await buildLocatorChoices(session.page, match.recommendedLocators ?? [], 'click');
-            const preferredChoice = locatorChoices[0] ?? null;
-            const preferredLocator = preferredChoice?.locator ?? match.preferredLocator ?? null;
-            matches.push({
-              ...match,
-              locatorChoices,
-              matchCount: preferredChoice?.matchCount ?? null,
-              locatorType: preferredChoice?.locatorType ?? preferredLocator?.strategy ?? null,
-              playwrightExpression:
-                preferredChoice?.playwrightExpression ??
-                (preferredLocator ? toPlaywrightExpression(preferredLocator) : null),
-              stabilityReason: preferredChoice?.stabilityReason ?? match.reasons?.[0] ?? null,
-              fallbackReason: preferredChoice?.fallbackReason ?? (preferredLocator?.strategy === 'css' ? 'css_fallback' : null),
-            });
+            matches.push(mergeVerifiedLocatorChoices(match, locatorChoices));
           }
 
           return {

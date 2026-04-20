@@ -45,7 +45,12 @@ export const scenario = {
           { type: 'fill', locator: { strategy: 'css', value: '#input-password' }, value: 'secret123' },
           { type: 'fill', locator: { strategy: 'css', value: '#input-date' }, value: '2026-04-18' },
           { type: 'click', locator: { strategy: 'css', value: '#btn-display-inputs' } },
-        ]);
+        ], {
+          generatedOpenOptions: {
+            waitUntil: 'domcontentloaded',
+            timeoutMs: 30000,
+          },
+        });
         const displayed = await runProbe(
           context,
           sessionId,
@@ -55,7 +60,12 @@ export const scenario = {
         );
         await validatePlaywright(context, sessionId, 'Clear the input values', [
           { type: 'click', locator: { strategy: 'css', value: '#btn-clear-inputs' } },
-        ]);
+        ], {
+          generatedOpenOptions: {
+            waitUntil: 'domcontentloaded',
+            timeoutMs: 30000,
+          },
+        });
         const cleared = await runProbe(
           context,
           sessionId,
@@ -72,7 +82,11 @@ export const scenario = {
           },
         };
       },
-      { url: 'https://practice.expandtesting.com/inputs' }
+      {
+        url: 'https://practice.expandtesting.com/inputs',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 30000,
+      }
     );
 
     return finalizeScenario(sessionRun);

@@ -46,6 +46,13 @@
 
         <label for="agree">Agree to policy</label>
         <input id="agree" type="checkbox" />
+
+        <div id="role-button" role="button" tabindex="0">ARIA action</div>
+        <div id="rich-notes" role="textbox" contenteditable="true" aria-label="Rich notes"></div>
+        <div id="role-switch" role="switch" aria-label="Escalate case" aria-checked="false" tabindex="0">Escalate case</div>
+        <div role="tablist" aria-label="Cases">
+          <div id="tab-open" role="tab" aria-selected="true" tabindex="0">Open</div>
+        </div>
       </form>
 
       <section id="shadow-edge-host"></section>
@@ -57,11 +64,13 @@
       shadowRoot.innerHTML = `
         <button aria-label="Shadow launch">Shadow launch</button>
         <button aria-label="Hidden shadow action" style="display: none">Hidden shadow action</button>
+        <a href="/shadow-help">Shadow help</a>
         <input aria-label="Shadow email" type="email" placeholder="shadow@example.com" />
         <textarea aria-label="Shadow notes" placeholder="Shadow note"></textarea>
         <select aria-label="Shadow topic">
           <option>Alpha</option>
         </select>
+        <div role="switch" aria-label="Shadow switch" aria-checked="true" tabindex="0">Shadow switch</div>
         <label>
           <input type="checkbox" data-testid="shadow-check" />
           Shadow agree

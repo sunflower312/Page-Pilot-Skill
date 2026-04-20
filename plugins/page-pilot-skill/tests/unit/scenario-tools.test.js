@@ -19,9 +19,8 @@ test('validatePlaywright revalidates generated plans in an isolated session', as
         if (args.sessionId === 'live-session') {
           return {
             ok: true,
-            source: { finalUrl: 'https://example.com/after', finalTitle: 'After' },
-            observation: {},
             validation: {
+              passed: true,
               firstPass: true,
               repaired: false,
               metrics: {
@@ -30,6 +29,8 @@ test('validatePlaywright revalidates generated plans in an isolated session', as
                 uniqueLocatorHitRate: 1,
               },
             },
+            source: { finalUrl: 'https://example.com/after', finalTitle: 'After' },
+            observation: {},
           };
         }
 
@@ -37,6 +38,7 @@ test('validatePlaywright revalidates generated plans in an isolated session', as
           return {
             ok: true,
             validation: {
+              passed: true,
               metrics: {
                 uniqueLocatorHitRate: 1,
                 uniqueLocatorHitCount: 1,
@@ -113,11 +115,23 @@ test('validatePlaywright can skip generated validation for intermediate benchmar
       toolCalls.push({ name, args });
 
       if (name === 'browser_validate_playwright') {
+        if (args.sessionId === 'generated-session') {
+          return {
+            ok: true,
+            validation: {
+              passed: true,
+              metrics: {
+                uniqueLocatorHitRate: 1,
+                uniqueLocatorHitCount: 1,
+              },
+            },
+          };
+        }
+
         return {
           ok: true,
-          source: { finalUrl: 'https://example.com/after', finalTitle: 'After' },
-          observation: {},
           validation: {
+            passed: true,
             firstPass: true,
             repaired: false,
             metrics: {
@@ -126,6 +140,8 @@ test('validatePlaywright can skip generated validation for intermediate benchmar
               uniqueLocatorHitRate: 1,
             },
           },
+          source: { finalUrl: 'https://example.com/after', finalTitle: 'After' },
+          observation: {},
         };
       }
 
@@ -151,6 +167,7 @@ test('validatePlaywright can skip generated validation for intermediate benchmar
   assert.equal(toolCalls.filter((call) => call.name === 'browser_validate_playwright').length, 1);
   assert.equal(toolCalls.some((call) => call.name === 'browser_generate_playwright'), false);
   assert.equal(result.generatedValidation?.skipped, true);
+  assert.equal(result.codeQuality.generatedValidationScope, 'not_attempted');
 });
 
 test('validatePlaywrightBatches runs generated validation once against the cumulative generated plan from all passed batches', async () => {
@@ -174,6 +191,7 @@ test('validatePlaywrightBatches runs generated validation once against the cumul
           return {
             ok: true,
             validation: {
+              passed: true,
               metrics: {
                 uniqueLocatorHitRate: 1,
                 uniqueLocatorHitCount: 2,
@@ -185,9 +203,8 @@ test('validatePlaywrightBatches runs generated validation once against the cumul
         validationCallCount += 1;
         return {
           ok: true,
-          source: { finalUrl: `https://example.com/step-${validationCallCount}`, finalTitle: `Step ${validationCallCount}` },
-          observation: {},
           validation: {
+            passed: true,
             firstPass: true,
             repaired: false,
             metrics: {
@@ -196,6 +213,8 @@ test('validatePlaywrightBatches runs generated validation once against the cumul
               uniqueLocatorHitRate: 1,
             },
           },
+          source: { finalUrl: `https://example.com/step-${validationCallCount}`, finalTitle: `Step ${validationCallCount}` },
+          observation: {},
         };
       }
 
@@ -239,4 +258,109 @@ test('validatePlaywrightBatches runs generated validation once against the cumul
   assert.deepEqual(closed, ['generated-session']);
   assert.equal(generatedValidationCalls.length, 1);
   assert.deepEqual(generatedValidationCalls[0].args.steps, [...firstBatch, ...secondBatch]);
+});
+
+test('validatePlaywright treats failed validation as recoverable business state instead of tool failure', async () => {
+  const toolCalls = [];
+
+  const context = {
+    site: { id: 'fixture-site', baseUrl: 'https://example.com' },
+    scenario: { id: 'fixture-scenario', entryUrl: 'https://example.com/start' },
+    recordStep() {},
+    async callTool(name, args = {}) {
+      toolCalls.push({ name, args });
+
+      if (name === 'browser_validate_playwright') {
+        if (args.sessionId === 'generated-session') {
+          return {
+            ok: true,
+            validation: {
+              passed: true,
+              metrics: {
+                uniqueLocatorHitRate: 1,
+                uniqueLocatorHitCount: 1,
+              },
+            },
+          };
+        }
+
+        return {
+          ok: true,
+          validation: {
+            passed: false,
+            firstPass: false,
+            repaired: false,
+            metrics: {
+              semanticLocatorRatio: 1,
+              cssFallbackRatio: 0,
+              uniqueLocatorHitRate: 0,
+            },
+          },
+          source: { finalUrl: 'https://example.com/fail', finalTitle: 'Failed' },
+          observation: {},
+          error: {
+            code: 'LOCATOR_NO_MATCH',
+            message: 'No match',
+          },
+        };
+      }
+
+      if (name === 'browser_repair_playwright') {
+        return {
+          ok: true,
+          validation: {
+            passed: true,
+            firstPass: false,
+            repaired: true,
+            metrics: {
+              semanticLocatorRatio: 1,
+              cssFallbackRatio: 0,
+              uniqueLocatorHitRate: 1,
+            },
+          },
+          repair: {
+            attempted: true,
+            repaired: true,
+            repairs: [{ kind: 'locator_reordered' }],
+          },
+          source: { finalUrl: 'https://example.com/after', finalTitle: 'After' },
+          observation: {},
+          repairedArtifacts: null,
+        };
+      }
+
+      if (name === 'browser_generate_playwright') {
+        return {
+          ok: true,
+          code: 'test code',
+          generatedPlan: [{ type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Submit' } } }],
+          metrics: {
+            locatorCount: 1,
+            semanticLocatorRatio: 1,
+            cssFallbackRatio: 0,
+            codeLineCount: 3,
+          },
+          source: {
+            startUrl: 'https://example.com/start',
+          },
+        };
+      }
+
+      throw new Error(`Unexpected tool ${name}`);
+    },
+    async openSession() {
+      return { ok: true, sessionId: 'generated-session', url: 'https://example.com/start' };
+    },
+    async closeSession() {
+      return true;
+    },
+  };
+
+  const result = await validatePlaywright(context, 'live-session', 'Recoverable validation', [
+    { type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } },
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.validation.passed, true);
+  assert.equal(toolCalls.some((call) => call.name === 'browser_repair_playwright'), true);
 });

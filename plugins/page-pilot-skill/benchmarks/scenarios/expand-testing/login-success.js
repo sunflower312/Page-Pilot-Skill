@@ -29,31 +29,39 @@ const verifySecurePageScript = `
 
 export const scenario = {
   async run(context) {
-    const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
-      await scanPage(context, sessionId, 'Scan the practice login page', 'brief');
-      await validatePlaywright(context, sessionId, 'Submit the practice credentials', [
-        { type: 'fill', locator: { strategy: 'label', value: 'Username' }, value: 'practice' },
-        { type: 'fill', locator: { strategy: 'label', value: 'Password' }, value: 'SuperSecretPassword!' },
-        { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Login' } } },
-        { type: 'assert_url', value: '/secure' },
-      ]);
-      const verification = await runProbe(
-        context,
-        sessionId,
-        'Verify the secure page state',
-        verifySecurePageScript,
-        (data) => ({
-          successText: data.successText,
-          heading: data.heading,
-          logoutHref: data.logoutHref,
-        })
-      );
-      addArtifact(await captureScreenshot(context, sessionId, 'expand-testing-secure-page'));
-      return {
-        summary: 'Logged into the Expand Testing secure area with the practice credentials.',
-        details: verification.data,
-      };
-    });
+    const sessionRun = await withScenarioSession(
+      context,
+      async ({ sessionId, addArtifact }) => {
+        await scanPage(context, sessionId, 'Scan the practice login page', 'brief');
+        await validatePlaywright(context, sessionId, 'Submit the practice credentials', [
+          { type: 'fill', locator: { strategy: 'label', value: 'Username' }, value: 'practice' },
+          { type: 'fill', locator: { strategy: 'label', value: 'Password' }, value: 'SuperSecretPassword!' },
+          { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Login' } } },
+          { type: 'assert_url', value: '/secure' },
+        ]);
+        const verification = await runProbe(
+          context,
+          sessionId,
+          'Verify the secure page state',
+          verifySecurePageScript,
+          (data) => ({
+            successText: data.successText,
+            heading: data.heading,
+            logoutHref: data.logoutHref,
+          })
+        );
+        addArtifact(await captureScreenshot(context, sessionId, 'expand-testing-secure-page'));
+        return {
+          summary: 'Logged into the Expand Testing secure area with the practice credentials.',
+          details: verification.data,
+        };
+      },
+      {
+        url: 'https://practice.expandtesting.com/login',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 30000,
+      }
+    );
 
     return finalizeScenario(sessionRun);
   },

@@ -74,15 +74,15 @@ function startInlineHtmlServer(routes, entryPath = '/') {
 async function installScanCostInstrumentation(page) {
   await page.evaluate(() => {
     const scope = window;
-    scope.__agentBrowserScanCounters = { shadowQueries: 0, frameReads: 0 };
+    scope.__pagePilotScanCounters = { shadowQueries: 0, frameReads: 0 };
 
-    if (scope.__agentBrowserScanInstrumentationInstalled) {
+    if (scope.__pagePilotScanInstrumentationInstalled) {
       return;
     }
 
     const originalShadowQueryAll = ShadowRoot.prototype.querySelectorAll;
     ShadowRoot.prototype.querySelectorAll = function patchedShadowQueryAll(...args) {
-      scope.__agentBrowserScanCounters.shadowQueries += 1;
+      scope.__pagePilotScanCounters.shadowQueries += 1;
       return originalShadowQueryAll.apply(this, args);
     };
 
@@ -91,24 +91,24 @@ async function installScanCostInstrumentation(page) {
       configurable: true,
       enumerable: frameDescriptor?.enumerable ?? false,
       get() {
-        scope.__agentBrowserScanCounters.frameReads += 1;
+        scope.__pagePilotScanCounters.frameReads += 1;
         return frameDescriptor?.get ? frameDescriptor.get.call(this) : null;
       },
     });
 
-    scope.__agentBrowserScanInstrumentationInstalled = true;
+    scope.__pagePilotScanInstrumentationInstalled = true;
   });
 }
 
 async function readAndResetScanCostCounters(page) {
   return page.evaluate(() => {
-    const current = { ...(window.__agentBrowserScanCounters ?? { shadowQueries: 0, frameReads: 0 }) };
-    window.__agentBrowserScanCounters = { shadowQueries: 0, frameReads: 0 };
+    const current = { ...(window.__pagePilotScanCounters ?? { shadowQueries: 0, frameReads: 0 }) };
+    window.__pagePilotScanCounters = { shadowQueries: 0, frameReads: 0 };
     return current;
   });
 }
 
-test('browser manager opens a complex page and structured scan returns v2 summaries', async () => {
+test('browser manager opens a complex page and structured scan returns v3 summaries', async () => {
   const fixtureServer = await startFixtureServer('complex-page.html');
   const manager = new BrowserManager({
     artifactRoot,
@@ -133,8 +133,10 @@ test('browser manager opens a complex page and structured scan returns v2 summar
       'role'
     );
     assert.equal(full.hints.primaryAction.label, 'Confirm send');
-    assert.equal(full.schemaVersion, 'scan.v2');
+    assert.equal(full.schemaVersion, 'scan.v3');
+    assert.equal(full.focus.kind, 'generic');
     assert.deepEqual(full.document.regions.forms, [{ name: 'support-form' }]);
+    assert.equal(full.summary.coverage.discoveredByGroup.buttons >= full.summary.coverage.retainedByGroup.buttons, true);
 
     const emailField = full.interactives.inputs.find((entry) => entry.css === '#email');
     assert.equal(emailField.accessibleName, 'Email');
@@ -143,9 +145,13 @@ test('browser manager opens a complex page and structured scan returns v2 summar
       label: 'Email',
       placeholder: 'email@example.com',
       testId: '',
+      inputType: 'email',
+      href: '',
+      controlType: 'text',
     });
     assert.equal(emailField.localContext.form?.name, 'support-form');
     assert.equal(emailField.actionability.actionable, true);
+    assert.equal(emailField.provenance.origin, 'document');
     assert.equal(emailField.geometry.width > 0, true);
     assert.equal(emailField.recommendedLocators[0].locator.strategy, 'role');
     assert.equal(emailField.stableFingerprint.role, 'textbox');
@@ -175,13 +181,24 @@ test('structured scan filters non-automatable input types and includes shadow fo
 
   try {
     const session = await manager.openSession({ url: fixtureServer.url });
-    const full = await collectStructuredPageData(session.page, { detailLevel: 'full' });
+    const full = await collectStructuredPageData(session.page, {
+      detailLevel: 'full',
+      includeSpecializedControls: true,
+      verification: {
+        enabled: true,
+        maxPerElement: 1,
+        groups: ['buttons', 'inputs'],
+      },
+    });
     const nameOnlyInput = full.interactives.inputs.find((entry) => entry.css === 'input[name="customerEmail"]');
+    const richNotes = full.interactives.inputs.find((entry) => entry.accessibleName === 'Rich notes');
 
     assert.match(full.title, /Scan Edge Cases/);
+    assert.equal(full.schemaVersion, 'scan.v3');
     assert.equal(full.document.shadowHosts.length, 2);
     assert.equal(full.interactives.inputs.some((entry) => entry.css === '#email'), true);
     assert.equal(full.interactives.inputs.some((entry) => entry.name === 'Shadow email' && entry.fromShadow), true);
+    assert.equal(full.interactives.links.some((entry) => entry.name === 'Shadow help' && entry.fromShadow), true);
     assert.equal(full.interactives.inputs.some((entry) => entry.css === '#schedule'), false);
     assert.equal(full.interactives.inputs.some((entry) => entry.css === '#accent'), false);
     assert.equal(full.interactives.inputs.some((entry) => entry.css === '#volume'), false);
@@ -193,12 +210,23 @@ test('structured scan filters non-automatable input types and includes shadow fo
     assert.equal(full.interactives.checkboxes.some((entry) => entry.css === '#agree'), true);
     assert.equal(full.interactives.buttons.some((entry) => entry.css === '#save\\:primary\\.action'), true);
     assert.equal(full.interactives.buttons.some((entry) => entry.css === 'button[data-testid="panel\\"one"]'), true);
+    assert.equal(full.interactives.buttons.some((entry) => entry.accessibleName === 'ARIA action'), true);
+    assert.equal(Boolean(richNotes), true);
     assert.equal(full.interactives.buttons.some((entry) => entry.name === 'Shadow launch' && entry.fromShadow), true);
     assert.equal(full.interactives.buttons.some((entry) => entry.name === 'Hidden shadow action'), false);
     assert.equal(full.interactives.buttons.some((entry) => entry.name === 'Nested shadow action' && entry.fromShadow), true);
     assert.equal(full.interactives.textareas.some((entry) => entry.name === 'Shadow notes' && entry.fromShadow), true);
     assert.equal(full.interactives.selects.some((entry) => entry.name === 'Shadow topic' && entry.fromShadow), true);
     assert.equal(full.interactives.checkboxes.some((entry) => entry.testId === 'shadow-check'), true);
+    assert.equal(full.specializedControls.radios.some((entry) => entry.css === '#channel-chat'), true);
+    assert.equal(full.specializedControls.dateInputs.some((entry) => entry.css === '#schedule'), true);
+    assert.equal(full.specializedControls.fileInputs.some((entry) => entry.css === '#upload'), true);
+    assert.equal(full.specializedControls.sliders.some((entry) => entry.css === '#volume'), true);
+    assert.equal(full.specializedControls.switches.some((entry) => entry.accessibleName === 'Escalate case'), true);
+    assert.equal(full.specializedControls.switches.some((entry) => entry.accessibleName === 'Shadow switch' && entry.fromShadow), true);
+    assert.equal(full.specializedControls.tabs.some((entry) => entry.accessibleName === 'Open'), true);
+    assert.equal(full.summary.coverage.discoveredByGroup.specialized.radios >= 1, true);
+    assert.equal(full.interactives.inputs.find((entry) => entry.css === '#email').recommendedLocators[0].verification.attempted, true);
     assert.equal(nameOnlyInput.preferredLocator.strategy, 'css');
     assert.equal(nameOnlyInput.locators[0].strategy, 'css');
     assert.equal(full.hints.formFields.some((entry) => entry.locator?.value === 'input[name="customerEmail"]'), true);
@@ -218,6 +246,10 @@ test('structured scan keeps workflow buttons and links when chrome fills the ear
   try {
     const session = await manager.openSession({ url: fixtureServer.url });
     const standard = await collectStructuredPageData(session.page, { detailLevel: 'standard' });
+    const navigationFocused = await collectStructuredPageData(session.page, {
+      detailLevel: 'brief',
+      focus: { kind: 'navigation' },
+    });
 
     assert.equal(standard.interactives.buttons.some((entry) => entry.css === '#start-plan-button'), true);
     assert.equal(standard.interactives.buttons.some((entry) => entry.css === '#acct-confirmation-next'), true);
@@ -225,6 +257,7 @@ test('structured scan keeps workflow buttons and links when chrome fills the ear
     assert.equal(standard.interactives.buttons.some((entry) => entry.css === '#chrome-action-12'), false);
     assert.equal(standard.interactives.links.some((entry) => entry.css === '#chrome-link-6'), false);
     assert.equal(standard.hints.primaryAction?.label, 'Next');
+    assert.equal(navigationFocused.interactives.links.some((entry) => entry.css === '#resume-plan-link'), true);
   } finally {
     await manager.closeAll();
     await fixtureServer.close();

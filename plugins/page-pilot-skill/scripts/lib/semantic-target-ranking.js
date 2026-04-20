@@ -36,6 +36,18 @@ function flattenInteractives(interactives = {}) {
   return entries;
 }
 
+function flattenSpecializedControls(specializedControls = {}) {
+  const entries = [];
+
+  for (const groupEntries of Object.values(specializedControls)) {
+    for (const entry of groupEntries ?? []) {
+      entries.push(entry);
+    }
+  }
+
+  return entries;
+}
+
 function buildFingerprintTarget(target = {}) {
   return {
     role: target.stableFingerprint?.role ?? target.role ?? '',
@@ -177,7 +189,7 @@ function compareMatches(left, right) {
 
 export function rankSemanticTarget(scan = {}, target = {}, options = {}) {
   const limit = options.limit ?? 8;
-  const interactiveEntries = flattenInteractives(scan.interactives);
+  const interactiveEntries = [...flattenInteractives(scan.interactives), ...flattenSpecializedControls(scan.specializedControls)];
   const matches = interactiveEntries
     .map((entry) => ({
       entry,

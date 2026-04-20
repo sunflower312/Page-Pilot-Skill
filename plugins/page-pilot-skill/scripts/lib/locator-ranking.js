@@ -3,18 +3,30 @@ import { toPlaywrightExpression } from './playwright-locator-expression.js';
 function buildSignalScore(strategy, value, element = {}) {
   const confidenceBoost = Math.round((element.confidence?.score ?? 0) * 10);
   const contextBoost = (element.withinDialog ? 2 : 0) + (element.withinForm ? 2 : 0);
+  const nameSource = element.provenance?.nameSource ?? element.nameSource ?? 'none';
+  const labelSource = element.provenance?.labelSource ?? element.labelSource ?? 'none';
+  const strongNameSource = [
+    'aria-label',
+    'aria-labelledby',
+    'label',
+    'wrapped-label',
+    'inner-text',
+    'table-row',
+  ].includes(nameSource);
+  const placeholderPenalty = nameSource === 'placeholder' ? -8 : 0;
+  const strongLabelBoost = ['label', 'wrapped-label', 'aria-labelledby', 'table-row'].includes(labelSource) ? 4 : 0;
 
   if (strategy === 'role') {
     const hasExactName = Boolean(value?.name);
-    return (hasExactName ? 86 : 68) + confidenceBoost + contextBoost;
+    return (hasExactName ? 86 : 68) + confidenceBoost + contextBoost + (strongNameSource ? 6 : 0) + placeholderPenalty;
   }
 
   if (strategy === 'label') {
-    return 84 + confidenceBoost + contextBoost;
+    return 84 + confidenceBoost + contextBoost + strongLabelBoost;
   }
 
   if (strategy === 'testId') {
-    const semanticFallbackPenalty = element.role && (element.accessibleName || element.label) ? -2 : 8;
+    const semanticFallbackPenalty = element.role && (element.accessibleName || element.name || element.label) ? -2 : 8;
     return 82 + confidenceBoost + semanticFallbackPenalty;
   }
 
@@ -23,7 +35,7 @@ function buildSignalScore(strategy, value, element = {}) {
   }
 
   if (strategy === 'placeholder') {
-    return 66 + confidenceBoost + contextBoost;
+    return 60 + confidenceBoost + contextBoost + (nameSource === 'placeholder' ? 2 : 0);
   }
 
   return 12;
@@ -98,7 +110,7 @@ function createCandidate(strategy, value, element = {}) {
   }
 
   const reasons = [...metadata.reasons];
-  let score = Math.max(metadata.score, buildSignalScore(strategy, value, element));
+  let score = buildSignalScore(strategy, value, element);
 
   if (contextReason && strategy !== 'css') {
     reasons.push(contextReason);
@@ -149,8 +161,8 @@ export function rankLocatorCandidates(element = {}) {
     createCandidate('role', element.role && roleName ? { role: element.role, name: roleName, exact: true } : null, element),
     createCandidate('label', element.attributes?.label ?? element.label, element),
     createCandidate('testId', element.attributes?.testId ?? element.testId, element),
-    createCandidate('placeholder', element.attributes?.placeholder ?? element.placeholder, element),
     createCandidate('text', element.visibleText ?? element.text, element),
+    createCandidate('placeholder', element.attributes?.placeholder ?? element.placeholder, element),
     createCandidate('css', element.css, element),
   ].filter(Boolean);
 

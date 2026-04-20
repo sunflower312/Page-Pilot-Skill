@@ -35,3 +35,47 @@ test('rankLocatorCandidates keeps semantic ordering and exposes the public candi
   assert.equal(ranked[ranked.length - 1].fallbackReason, 'css_fallback');
   assert.equal(ranked[ranked.length - 1].playwrightExpression, 'page.locator("#email")');
 });
+
+test('rankLocatorCandidates lowers role-name confidence when the name only comes from placeholder fallback', () => {
+  const placeholderOnly = rankLocatorCandidates({
+    role: 'textbox',
+    accessibleName: 'Search docs',
+    visibleText: '',
+    attributes: {
+      label: '',
+      placeholder: 'Search docs',
+      testId: '',
+    },
+    provenance: {
+      nameSource: 'placeholder',
+      labelSource: 'none',
+    },
+    css: '#search',
+    confidence: { score: 0.6 },
+    withinForm: true,
+    group: 'inputs',
+  });
+
+  const labeled = rankLocatorCandidates({
+    role: 'textbox',
+    accessibleName: 'Search docs',
+    visibleText: '',
+    attributes: {
+      label: 'Search docs',
+      placeholder: 'Search docs',
+      testId: '',
+    },
+    provenance: {
+      nameSource: 'label',
+      labelSource: 'label',
+    },
+    css: '#search',
+    confidence: { score: 0.6 },
+    withinForm: true,
+    group: 'inputs',
+  });
+
+  assert.equal(placeholderOnly[0].locatorType, 'role');
+  assert.equal(labeled[0].locatorType, 'role');
+  assert.equal(placeholderOnly[0].score < labeled[0].score, true);
+});

@@ -22,7 +22,10 @@ export async function executeSessionActions({ sessionId, session, actions, artif
     capture: async (action, page, locator) => captureActionArtifact(sessionId, action, page, locator, artifactManager),
   });
   const after = await captureObservationSnapshot(session.page);
-  const semanticScan = await collectStructuredPageData(session.page, { detailLevel: 'brief' }).catch(() => null);
+  const semanticScan = await collectStructuredPageData(session.page, {
+    detailLevel: 'brief',
+    includeSpecializedControls: true,
+  }).catch(() => null);
 
   return {
     before,

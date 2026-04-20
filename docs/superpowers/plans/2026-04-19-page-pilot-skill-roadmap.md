@@ -245,6 +245,65 @@
 - [x] 明确哪些 benchmark 辅助能力属于内部专用，不纳入公共契约
 - [x] 为每类代码质量指标补断言，避免以后回退成“只要场景能跑完就算通过”
 
+## Phase 11：统一公共 envelope 与契约示例测试
+
+**Files:**
+- Modify: `plugins/page-pilot-skill/scripts/tools/analysis-tools.js`
+- Modify: `plugins/page-pilot-skill/scripts/tools/playwright-tools.js`
+- Modify: `plugins/page-pilot-skill/benchmarks/lib/benchmark-runner.js`
+- Modify: `plugins/page-pilot-skill/benchmarks/scenarios/_shared/scenario-tools.js`
+- Modify: `docs/contracts.md`
+- Modify: `docs/tools/browser-scan.md`
+- Modify: `docs/tools/browser-rank-locators.md`
+- Test: `plugins/page-pilot-skill/tests/unit/public-contracts.test.js`
+- Test: `plugins/page-pilot-skill/tests/unit/scenario-tools.test.js`
+
+**Deliverables:**
+- 顶层 envelope 统一规则
+- 关键工具示例 JSON 契约测试
+- benchmark helper 的工具失败/业务失败边界
+
+- [x] 统一 `browser_scan`、`browser_rank_locators`、`browser_validate_playwright`、`browser_repair_playwright` 的顶层 `ok` 语义
+- [x] 让 benchmark helper 只把真正的工具失败当成异常抛出，不再误把业务失败当成工具失败
+- [x] 修正 `docs/contracts.md` 与 `docs/tools/*.md` 中关键公共工具的示例漂移
+- [x] 为 `browser_scan` 和 `browser_rank_locators` 增加示例 JSON 解析与关键字段快照测试
+
+## Phase 12：推进 browser_scan v3
+
+**Files:**
+- Reference: `docs/superpowers/specs/2026-04-20-browser-scan-v3-design.md`
+- Reference: `docs/superpowers/plans/2026-04-20-browser-scan-v3-plan.md`
+
+**Deliverables:**
+- `scan.v3`
+- provenance
+- role-based detection
+- `summary.coverage`
+- `specializedControls`
+- scan-level 轻量验证
+- 第一版 `collections`
+
+- [x] 按 `browser_scan v3` 专项 spec/plan 推进实现
+
+## Phase 13：最后一轮 DX 与旧命名收尾
+
+**Files:**
+- Modify: `plugins/page-pilot-skill/scripts/doctor.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/action-stability.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/stability-wait.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/observation.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/observation.test.js`
+- Modify: `plugins/page-pilot-skill/tests/integration/browser-workflow.test.js`
+
+**Deliverables:**
+- 增强版 `doctor`
+- 旧内部命名清理
+- DX 收尾检查清单
+
+- [x] 增强 `doctor`，至少补 `mcp-server`、Codex CLI、插件目录与安装脚本的基础检查
+- [x] 清理 `__agentBrowser*` 一类旧内部命名，统一为 `pagePilot*`
+- [x] 跑一次关键字检查，确认旧命名只保留在历史 benchmark 产物或明确允许的历史文档中
+
 ## 验收标准
 
 - [x] 公开工具面已锁死，且只有一套文档口径
@@ -256,3 +315,8 @@
 - [x] `mcp-server.js` 与 `structured-scan.js` 已开始按边界拆分
 - [x] 仓库内旧 Agent Browser 命名和旧状态噪音已清理
 - [x] benchmark 主指标已完整改成代码质量指标
+- [x] 顶层 envelope 语义在所有公共工具中统一
+- [x] 关键公共工具的文档示例进入自动测试
+- [x] role fallback 一致性有测试锁住
+- [x] `browser_scan v3` 已按专项计划落地
+- [x] `doctor` 与最后一轮旧命名收尾完成

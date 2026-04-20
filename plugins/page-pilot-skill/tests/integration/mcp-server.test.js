@@ -48,6 +48,31 @@ function startFixtureServer() {
   });
 }
 
+function startInlineHtmlServer(routes, entryPath = '/') {
+  return new Promise((resolve) => {
+    const server = createServer((req, res) => {
+      const requestPath = new URL(req.url, 'http://127.0.0.1').pathname;
+      const body = routes[requestPath];
+      if (!body) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(`No fixture for ${requestPath}`);
+        return;
+      }
+
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(body);
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({
+        close: () => new Promise((done) => server.close(done)),
+        url: `http://127.0.0.1:${address.port}${entryPath}`,
+      });
+    });
+  });
+}
+
 function createClient() {
   const transport = new StdioClientTransport({
     command: 'node',
@@ -243,6 +268,86 @@ test('mcp browser_probe rejects internal-only templates from the public contract
   }
 });
 
+test('mcp browser_rank_locators sees specialized controls through the default semantic scan path', async () => {
+  const inlineServer = await startInlineHtmlServer(
+    {
+      '/specialized': `
+        <!doctype html>
+        <html lang="en">
+          <body>
+            <main>
+              <h1>Escalation panel</h1>
+              <div role="switch" aria-checked="false" tabindex="0">Escalate case</div>
+            </main>
+          </body>
+        </html>
+      `,
+    },
+    '/specialized'
+  );
+  const { client, transport } = createClient();
+
+  try {
+    await client.connect(transport);
+
+    const openResult = await client.callTool({
+      name: 'browser_open',
+      arguments: {
+        url: inlineServer.url,
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 5000,
+      },
+    });
+    const sessionId = openResult.structuredContent.sessionId;
+
+    const ranking = await client.callTool({
+      name: 'browser_rank_locators',
+      arguments: {
+        sessionId,
+        target: {
+          role: 'switch',
+          accessibleName: 'Escalate case',
+          visibleText: 'Escalate case',
+        },
+      },
+    });
+
+    assert.equal(ranking.structuredContent.ok, true);
+    assert.equal(ranking.structuredContent.matches.length > 0, true);
+    assert.equal(ranking.structuredContent.matches[0].element.role, 'switch');
+    assert.equal(ranking.structuredContent.matches[0].locatorChoices[0].locator.strategy, 'role');
+
+    const scan = await client.callTool({
+      name: 'browser_scan',
+      arguments: {
+        sessionId,
+        detailLevel: 'standard',
+        includeSpecializedControls: true,
+        verification: {
+          enabled: true,
+          groups: ['switches'],
+          maxPerElement: 1,
+        },
+      },
+    });
+
+    assert.equal(scan.structuredContent.ok, true);
+    assert.equal(scan.structuredContent.specializedControls.switches.length > 0, true);
+    assert.equal(
+      scan.structuredContent.specializedControls.switches[0].recommendedLocators[0].verification.attempted,
+      true
+    );
+
+    await client.callTool({
+      name: 'browser_close',
+      arguments: { sessionId },
+    });
+  } finally {
+    await client.close();
+    await inlineServer.close();
+  }
+});
+
 test('mcp browser_validate_playwright rejects unbounded validation sequences', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
@@ -429,7 +534,8 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
         steps: [{ type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } }],
       },
     });
-    assert.equal(failedActionsResult.structuredContent.ok, false);
+    assert.equal(failedActionsResult.structuredContent.ok, true);
+    assert.equal(failedActionsResult.structuredContent.validation.passed, false);
 
     const expectedStateFailure = await client.callTool({
       name: 'browser_validate_playwright',
@@ -444,7 +550,8 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
         ],
       },
     });
-    assert.equal(expectedStateFailure.structuredContent.ok, false);
+    assert.equal(expectedStateFailure.structuredContent.ok, true);
+    assert.equal(expectedStateFailure.structuredContent.validation.passed, false);
     assert.equal(expectedStateFailure.structuredContent.failureKind, 'EXPECTED_STATE_CHANGE_NOT_OBSERVED');
     assert.equal(expectedStateFailure.structuredContent.stateChanged, false);
 
@@ -461,7 +568,8 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
         ],
       },
     });
-    assert.equal(expectedStateRepair.structuredContent.ok, false);
+    assert.equal(expectedStateRepair.structuredContent.ok, true);
+    assert.equal(expectedStateRepair.structuredContent.validation.passed, false);
     assert.equal(expectedStateRepair.structuredContent.repairAttempted, false);
 
     const failedAssertionResult = await client.callTool({
@@ -473,7 +581,8 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
         ],
       },
     });
-    assert.equal(failedAssertionResult.structuredContent.ok, false);
+    assert.equal(failedAssertionResult.structuredContent.ok, true);
+    assert.equal(failedAssertionResult.structuredContent.validation.passed, false);
     assert.equal(failedAssertionResult.structuredContent.assertionsPassed, false);
     assert.equal(failedAssertionResult.structuredContent.evidence.steps[0].assertionPassed, false);
 
@@ -664,7 +773,8 @@ test('mcp browser_generate_playwright preserves earlier passed evidence after a 
         steps: [{ type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } }],
       },
     });
-    assert.equal(failedValidation.structuredContent.ok, false);
+    assert.equal(failedValidation.structuredContent.ok, true);
+    assert.equal(failedValidation.structuredContent.validation.passed, false);
 
     const generated = await client.callTool({
       name: 'browser_generate_playwright',

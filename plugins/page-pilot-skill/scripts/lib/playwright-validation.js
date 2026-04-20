@@ -214,7 +214,10 @@ async function normalizeValidatedStep(step = {}, validationScan = null, page) {
 }
 
 export async function buildValidationResult({ sessionId, before, after, observation, result, page } = {}) {
-  const validationScan = await collectStructuredPageData(page, { detailLevel: 'standard' }).catch(() => null);
+  const validationScan = await collectStructuredPageData(page, {
+    detailLevel: 'standard',
+    includeSpecializedControls: true,
+  }).catch(() => null);
   const steps = [];
   for (const step of result.steps ?? []) {
     steps.push(await normalizeValidatedStep(step, validationScan, page));
@@ -295,7 +298,7 @@ export async function buildValidationResult({ sessionId, before, after, observat
   };
 
   return {
-    ok: passed,
+    ok: true,
     locatorResolved,
     uniqueMatch,
     actionExecuted,

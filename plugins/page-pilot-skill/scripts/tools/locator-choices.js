@@ -18,14 +18,15 @@ export async function buildLocatorChoices(page, locatorCandidates = [], usage = 
     seen.add(key);
 
     const verification = await verifyLocatorCandidate(page, locator, usage).catch(() => null);
+    const finalLocator = verification?.inspection?.locator ?? locator;
     choices.push({
       ...candidate,
-      locator,
-      locatorType: locator.strategy,
+      locator: finalLocator,
+      locatorType: finalLocator.strategy,
       matchCount: verification?.inspection?.count ?? candidate?.matchCount ?? null,
-      playwrightExpression: candidate?.playwrightExpression ?? toPlaywrightExpression(locator),
+      playwrightExpression: toPlaywrightExpression(finalLocator),
       stabilityReason: candidate?.stabilityReason ?? candidate?.reasons?.[0] ?? null,
-      fallbackReason: candidate?.fallbackReason ?? (locator.strategy === 'css' ? 'css_fallback' : null),
+      fallbackReason: candidate?.fallbackReason ?? (finalLocator.strategy === 'css' ? 'css_fallback' : null),
       confidence: candidate?.confidence ?? null,
     });
   }

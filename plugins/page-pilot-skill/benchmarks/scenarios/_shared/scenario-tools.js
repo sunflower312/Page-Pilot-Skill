@@ -72,6 +72,13 @@ async function validateGeneratedPlan(context, sessionId, generatedPlan = []) {
       };
     }
 
+    if (result.validation?.passed !== true) {
+      return {
+        ...result,
+        ok: true,
+      };
+    }
+
     batchResults.push(result);
   }
 
@@ -128,8 +135,9 @@ function buildCodeQuality({
     cssFallbackCount,
     uniqueLocatorHitCount,
     firstValidationPassed,
-    generatedValidationPassed: generatedValidation?.ok === true,
-    generatedValidationScope: generatedValidation ? 'cumulative_generated_plan' : 'not_attempted',
+    generatedValidationPassed: generatedValidation?.validation?.passed === true,
+    generatedValidationScope:
+      generatedValidation?.skipped === true ? 'not_attempted' : generatedValidation ? 'cumulative_generated_plan' : 'not_attempted',
     repaired,
     codeLineCount: generated?.metrics?.codeLineCount ?? null,
   };
@@ -171,14 +179,7 @@ export async function scanPage(context, sessionId, title, detailLevel = 'brief')
 export async function validatePlaywright(context, sessionId, title, steps, options = {}) {
   let validation = await context.callTool('browser_validate_playwright', { sessionId, steps });
   let repair = null;
-  const firstValidationPassed = validation.ok === true;
-
-  if (validation.ok !== true) {
-    repair = await context.callTool('browser_repair_playwright', { sessionId, steps });
-    if (repair.ok === true) {
-      validation = repair;
-    }
-  }
+  const firstValidationPassed = validation.validation?.passed === true;
 
   if (validation.ok !== true) {
     context.recordStep(title, 'failed', {
@@ -203,6 +204,36 @@ export async function validatePlaywright(context, sessionId, title, steps, optio
     throw error;
   }
 
+  if (validation.validation?.passed !== true) {
+    repair = await context.callTool('browser_repair_playwright', { sessionId, steps });
+    if (repair.ok === true && repair.validation?.passed === true) {
+      validation = repair;
+    }
+  }
+
+  if (validation.validation?.passed !== true) {
+    context.recordStep(title, 'failed', {
+      stepCount: steps.length,
+      finalUrl: validation.source?.finalUrl ?? null,
+      finalTitle: validation.source?.finalTitle ?? null,
+      observation: summarizeObservation(validation.observation),
+      codeQuality: buildCodeQuality({
+        validation,
+        firstValidationPassed,
+        repaired: false,
+      }),
+      generatedValidation: {
+        ok: false,
+        failureKind: validation.failureKind ?? validation.error?.code ?? null,
+        stateChanged: validation.stateChanged ?? null,
+      },
+    });
+    const error = new Error(validation.error?.message ?? 'Playwright validation failed');
+    error.code = validation.failureKind ?? validation.error?.code ?? 'BENCHMARK_VALIDATION_FAILED';
+    error.details = repair ?? validation;
+    throw error;
+  }
+
   let generated = null;
   let generatedValidation = {
     ok: null,
@@ -218,7 +249,12 @@ export async function validatePlaywright(context, sessionId, title, steps, optio
       includeTestWrapper: false,
     });
     const generatedStartUrl = generated.source?.startUrl ?? context.scenario.entryUrl ?? context.site.baseUrl;
-    const generatedSession = await context.openSession({ url: generatedStartUrl });
+    const generatedSession = await context.openSession({
+      waitUntil: 'domcontentloaded',
+      timeoutMs: 30000,
+      ...(options.generatedOpenOptions ?? {}),
+      url: generatedStartUrl,
+    });
 
     try {
       generatedValidation = await validateGeneratedPlan(context, generatedSession.sessionId, generated.generatedPlan);
@@ -230,12 +266,16 @@ export async function validatePlaywright(context, sessionId, title, steps, optio
   const codeQuality = buildCodeQuality({
     validation,
     generated,
-    generatedValidation: generatedValidation.ok === true ? generatedValidation : null,
+    generatedValidation: generatedValidation.validation?.passed === true ? generatedValidation : null,
     firstValidationPassed,
     repaired: validation.validation?.repaired === true,
   });
 
-  if (generatedValidation.ok === false) {
+  const generatedValidationFailed =
+    generatedValidation.skipped !== true &&
+    (generatedValidation.ok !== true || generatedValidation.validation?.passed !== true);
+
+  if (generatedValidationFailed) {
     context.recordStep(title, 'failed', {
       stepCount: steps.length,
       finalUrl: validation.source?.finalUrl ?? null,
@@ -262,10 +302,11 @@ export async function validatePlaywright(context, sessionId, title, steps, optio
     observation: summarizeObservation(validation.observation),
     codeQuality,
     generatedCode: generated?.code ?? null,
-    generatedValidation: {
+      generatedValidation: {
       ok: generatedValidation.ok,
       skipped: generatedValidation.skipped === true,
       reason: generatedValidation.reason ?? null,
+      passed: generatedValidation.validation?.passed ?? null,
       failureKind: generatedValidation.failureKind ?? null,
       stateChanged: generatedValidation.stateChanged ?? null,
     },

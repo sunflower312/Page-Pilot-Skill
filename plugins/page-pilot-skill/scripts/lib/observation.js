@@ -167,7 +167,7 @@ async function collectSnapshot(page) {
     page.title(),
     page.evaluate((payload) => {
       const { maxSemanticInteractives, textLineLimit } = payload;
-      const identityKey = '__agentBrowserHeadlessDocumentIdentity__';
+      const identityKey = '__pagePilotDocumentIdentity__';
       if (!Object.prototype.hasOwnProperty.call(globalThis, identityKey)) {
         Object.defineProperty(globalThis, identityKey, {
           configurable: true,

@@ -11,6 +11,7 @@ import { selectActiveDialog, selectPrimaryAction } from './semantic-model.js';
 const DETAIL_SETTINGS = {
   brief: {
     maxInteractives: 6,
+    maxSpecializedPerGroup: 2,
     maxFormFields: 2,
     maxDialogs: 1,
     maxFrames: 1,
@@ -21,6 +22,7 @@ const DETAIL_SETTINGS = {
   },
   standard: {
     maxInteractives: 12,
+    maxSpecializedPerGroup: 3,
     maxFormFields: 4,
     maxDialogs: 2,
     maxFrames: 2,
@@ -31,6 +33,7 @@ const DETAIL_SETTINGS = {
   },
   full: {
     maxInteractives: 30,
+    maxSpecializedPerGroup: 6,
     maxFormFields: 8,
     maxDialogs: 4,
     maxFrames: 4,
@@ -49,6 +52,14 @@ export const BROWSER_COLLECTION_SETTINGS = {
     maxSelects: 2,
     maxTextareas: 1,
     maxCheckboxes: 2,
+    maxRadios: 2,
+    maxSwitches: 2,
+    maxSliders: 2,
+    maxTabs: 3,
+    maxOptions: 3,
+    maxMenuItems: 3,
+    maxFileInputs: 2,
+    maxDateInputs: 2,
     maxDialogs: 1,
     maxFrames: 1,
     maxShadowHosts: 1,
@@ -67,6 +78,14 @@ export const BROWSER_COLLECTION_SETTINGS = {
     maxSelects: 3,
     maxTextareas: 2,
     maxCheckboxes: 3,
+    maxRadios: 3,
+    maxSwitches: 3,
+    maxSliders: 3,
+    maxTabs: 4,
+    maxOptions: 4,
+    maxMenuItems: 4,
+    maxFileInputs: 2,
+    maxDateInputs: 2,
     maxDialogs: 2,
     maxFrames: 2,
     maxShadowHosts: 1,
@@ -85,6 +104,14 @@ export const BROWSER_COLLECTION_SETTINGS = {
     maxSelects: 8,
     maxTextareas: 8,
     maxCheckboxes: 8,
+    maxRadios: 6,
+    maxSwitches: 6,
+    maxSliders: 6,
+    maxTabs: 8,
+    maxOptions: 8,
+    maxMenuItems: 8,
+    maxFileInputs: 4,
+    maxDateInputs: 4,
     maxDialogs: 4,
     maxFrames: 4,
     maxShadowHosts: 4,
@@ -118,6 +145,26 @@ function regroupInteractives(entries = []) {
     selects: [],
     textareas: [],
     checkboxes: [],
+  };
+
+  for (const entry of entries) {
+    groups[entry.group] ??= [];
+    groups[entry.group].push(entry);
+  }
+
+  return groups;
+}
+
+function regroupSpecialized(entries = []) {
+  const groups = {
+    radios: [],
+    switches: [],
+    sliders: [],
+    tabs: [],
+    options: [],
+    menuItems: [],
+    fileInputs: [],
+    dateInputs: [],
   };
 
   for (const entry of entries) {
@@ -216,6 +263,26 @@ function inferEntryLocalContext(entry = {}, raw = {}) {
   };
 }
 
+function inferProvenance(entry = {}) {
+  return {
+    roleSource: entry.roleSource || 'native_tag',
+    nameSource: entry.nameSource || 'none',
+    labelSource: entry.labelSource || 'none',
+    descriptionSource: entry.descriptionSource || 'none',
+    origin: entry.fromShadow ? 'shadow_dom' : 'document',
+  };
+}
+
+function inferOrigin(entry = {}) {
+  return {
+    fromShadow: entry.fromShadow === true,
+    shadowHostCss: entry.fromShadow ? entry.css?.split(' ').slice(0, -1).join(' ') || '' : '',
+    frameName: entry.frameName || '',
+    frameTitle: entry.frameTitle || '',
+    sameOriginFrame: entry.sameOriginFrame ?? null,
+  };
+}
+
 function inferStableFingerprint(entry = {}, accessibleName = '') {
   return {
     role: entry.role || '',
@@ -233,6 +300,8 @@ function inferStableFingerprint(entry = {}, accessibleName = '') {
 function inferConfidence(entry = {}, locators = [], actionability = { actionable: false }) {
   const reasons = [];
   let score = actionability.actionable ? 0.24 : 0.12;
+  const nameSource = entry.nameSource || entry.provenance?.nameSource || 'none';
+  const labelSource = entry.labelSource || entry.provenance?.labelSource || 'none';
 
   if (entry.role && (entry.name || entry.accessibleName)) {
     score += 0.36;
@@ -245,6 +314,19 @@ function inferConfidence(entry = {}, locators = [], actionability = { actionable
   } else if (entry.placeholder) {
     score += 0.1;
     reasons.push('placeholder');
+  }
+
+  if (nameSource === 'placeholder') {
+    score -= 0.08;
+    reasons.push('placeholder_name_source');
+  } else if (['aria-label', 'aria-labelledby', 'label', 'wrapped-label'].includes(nameSource)) {
+    score += 0.06;
+    reasons.push('strong_name_source');
+  }
+
+  if (['label', 'wrapped-label', 'aria-labelledby', 'table-row'].includes(labelSource)) {
+    score += 0.04;
+    reasons.push('strong_label_source');
   }
 
   if (entry.testId) {
@@ -284,9 +366,16 @@ function enrichEntry(entry = {}, raw = {}) {
   const geometry = normalizeGeometry(entry.geometry);
   const stableFingerprint = inferStableFingerprint(entry, accessibleName);
   const confidence = inferConfidence({ ...entry, accessibleName }, locators, actionability);
+  const provenance = inferProvenance(entry);
+  const origin = inferOrigin(entry);
 
   return {
     ...entry,
+    id: entry.id || `scan-${entry.group}-${entry.domIndex ?? 'x'}-${(entry.css || entry.accessibleName || entry.visibleText || 'entry')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 48)}`,
     accessibleName,
     visibleText,
     description,
@@ -294,10 +383,15 @@ function enrichEntry(entry = {}, raw = {}) {
       label: entry.label || '',
       placeholder: entry.placeholder || '',
       testId: entry.testId || '',
+      inputType: entry.inputType || '',
+      href: entry.href || '',
+      controlType: entry.controlType || '',
     },
     state,
     actionability,
     localContext,
+    provenance,
+    origin,
     geometry,
     recommendedLocators,
     stableFingerprint,
@@ -316,6 +410,112 @@ function enrichInteractives(interactives = {}, raw = {}) {
   }
 
   return enriched;
+}
+
+function buildCollections(raw = {}, settings = {}) {
+  const tables = pickByLimit(raw.tables ?? [], settings.maxLists).map((table) => ({
+    label: table.label || table.css || 'table',
+    headers: table.headers ?? [],
+    rowCountEstimate: table.rowCountEstimate ?? null,
+    rowActions: table.rowActions ?? [],
+    locator: {
+      strategy: 'css',
+      value: table.css,
+    },
+  }));
+  const lists = pickByLimit(raw.lists ?? [], settings.maxLists).map((list) => ({
+    label: list.label || list.css || 'list',
+    itemsCount: list.itemsCount ?? 0,
+    sampleItems: list.itemsPreview ?? [],
+    locator: {
+      strategy: 'css',
+      value: list.css,
+    },
+  }));
+  const resultRegions = [
+    ...tables
+      .filter((table) => (table.rowCountEstimate ?? 0) > 0)
+      .map((table) => ({ kind: 'table', label: table.label, itemsCount: table.rowCountEstimate ?? 0 })),
+    ...lists
+      .filter((list) => (list.itemsCount ?? 0) > 0)
+      .map((list) => ({ kind: 'list', label: list.label, itemsCount: list.itemsCount ?? 0 })),
+  ].slice(0, settings.maxLists);
+
+  return {
+    tables,
+    lists,
+    cards: [],
+    resultRegions,
+  };
+}
+
+function buildCoverage(raw = {}, groupedInteractives = {}, groupedSpecialized = {}, settings = {}, collectionSettings = {}) {
+  const retainedByGroup = {
+    buttons: groupedInteractives.buttons?.length ?? 0,
+    links: groupedInteractives.links?.length ?? 0,
+    inputs: groupedInteractives.inputs?.length ?? 0,
+    selects: groupedInteractives.selects?.length ?? 0,
+    textareas: groupedInteractives.textareas?.length ?? 0,
+    checkboxes: groupedInteractives.checkboxes?.length ?? 0,
+    specialized: {
+      radios: groupedSpecialized.radios?.length ?? 0,
+      switches: groupedSpecialized.switches?.length ?? 0,
+      sliders: groupedSpecialized.sliders?.length ?? 0,
+      tabs: groupedSpecialized.tabs?.length ?? 0,
+      options: groupedSpecialized.options?.length ?? 0,
+      menuItems: groupedSpecialized.menuItems?.length ?? 0,
+      fileInputs: groupedSpecialized.fileInputs?.length ?? 0,
+      dateInputs: groupedSpecialized.dateInputs?.length ?? 0,
+    },
+  };
+  const discoveredByGroup = {
+    buttons: raw.discoveredCounts?.buttons ?? raw.interactives?.buttons?.length ?? 0,
+    links: raw.discoveredCounts?.links ?? raw.interactives?.links?.length ?? 0,
+    inputs: raw.discoveredCounts?.inputs ?? raw.interactives?.inputs?.length ?? 0,
+    selects: raw.discoveredCounts?.selects ?? raw.interactives?.selects?.length ?? 0,
+    textareas: raw.discoveredCounts?.textareas ?? raw.interactives?.textareas?.length ?? 0,
+    checkboxes: raw.discoveredCounts?.checkboxes ?? raw.interactives?.checkboxes?.length ?? 0,
+    specialized: {
+      radios: raw.discoveredCounts?.specialized?.radios ?? raw.specializedControls?.radios?.length ?? 0,
+      switches: raw.discoveredCounts?.specialized?.switches ?? raw.specializedControls?.switches?.length ?? 0,
+      sliders: raw.discoveredCounts?.specialized?.sliders ?? raw.specializedControls?.sliders?.length ?? 0,
+      tabs: raw.discoveredCounts?.specialized?.tabs ?? raw.specializedControls?.tabs?.length ?? 0,
+      options: raw.discoveredCounts?.specialized?.options ?? raw.specializedControls?.options?.length ?? 0,
+      menuItems: raw.discoveredCounts?.specialized?.menuItems ?? raw.specializedControls?.menuItems?.length ?? 0,
+      fileInputs: raw.discoveredCounts?.specialized?.fileInputs ?? raw.specializedControls?.fileInputs?.length ?? 0,
+      dateInputs: raw.discoveredCounts?.specialized?.dateInputs ?? raw.specializedControls?.dateInputs?.length ?? 0,
+    },
+  };
+  const omittedByGroup = {
+    buttons: Math.max(0, discoveredByGroup.buttons - retainedByGroup.buttons),
+    links: Math.max(0, discoveredByGroup.links - retainedByGroup.links),
+    inputs: Math.max(0, discoveredByGroup.inputs - retainedByGroup.inputs),
+    selects: Math.max(0, discoveredByGroup.selects - retainedByGroup.selects),
+    textareas: Math.max(0, discoveredByGroup.textareas - retainedByGroup.textareas),
+    checkboxes: Math.max(0, discoveredByGroup.checkboxes - retainedByGroup.checkboxes),
+    specialized: {
+      radios: Math.max(0, discoveredByGroup.specialized.radios - retainedByGroup.specialized.radios),
+      switches: Math.max(0, discoveredByGroup.specialized.switches - retainedByGroup.specialized.switches),
+      sliders: Math.max(0, discoveredByGroup.specialized.sliders - retainedByGroup.specialized.sliders),
+      tabs: Math.max(0, discoveredByGroup.specialized.tabs - retainedByGroup.specialized.tabs),
+      options: Math.max(0, discoveredByGroup.specialized.options - retainedByGroup.specialized.options),
+      menuItems: Math.max(0, discoveredByGroup.specialized.menuItems - retainedByGroup.specialized.menuItems),
+      fileInputs: Math.max(0, discoveredByGroup.specialized.fileInputs - retainedByGroup.specialized.fileInputs),
+      dateInputs: Math.max(0, discoveredByGroup.specialized.dateInputs - retainedByGroup.specialized.dateInputs),
+    },
+  };
+
+  return {
+    discoveredByGroup,
+    retainedByGroup,
+    omittedByGroup,
+    budget: {
+      maxInteractives: settings.maxInteractives,
+      maxButtons: collectionSettings.maxButtons ?? BROWSER_COLLECTION_SETTINGS.standard.maxButtons,
+      maxInputs: collectionSettings.maxInputs ?? BROWSER_COLLECTION_SETTINGS.standard.maxInputs,
+      maxSpecializedPerGroup: settings.maxSpecializedPerGroup,
+    },
+  };
 }
 
 function pickByLimit(entries = [], limit) {
@@ -356,7 +556,7 @@ function buildDocument(raw, detailLevel, settings) {
   };
 }
 
-function buildHints(raw, filteredEntries, detailLevel, settings) {
+function buildHints(raw, filteredEntries, detailLevel, settings, collections) {
   const toLocatorReference = (candidate) => {
     const locator = unwrapRankedLocator(candidate);
     return locator ? { strategy: locator.strategy, value: locator.value } : null;
@@ -393,6 +593,12 @@ function buildHints(raw, filteredEntries, detailLevel, settings) {
       label: list.label || list.css || 'list',
       itemsCount: list.itemsCount ?? 0,
     }));
+  const primaryCollection = collections?.resultRegions?.[0]
+    ? {
+        kind: collections.resultRegions[0].kind,
+        label: collections.resultRegions[0].label,
+      }
+    : null;
 
   return {
     activeDialog,
@@ -406,6 +612,7 @@ function buildHints(raw, filteredEntries, detailLevel, settings) {
       : null,
     possiblePrimaryForm,
     possibleResultRegions,
+    primaryCollection,
     context: {
       hasFrames: (raw.frames?.length ?? 0) > 0,
       hasShadowHosts: (raw.shadowHosts?.length ?? 0) > 0,
@@ -414,7 +621,11 @@ function buildHints(raw, filteredEntries, detailLevel, settings) {
   };
 }
 
-export function normalizeRawScan(raw, detailLevel) {
+export function normalizeRawScan(raw, options = {}) {
+  const detailLevel = typeof options === 'string' ? options : options.detailLevel ?? 'standard';
+  const focus = typeof options === 'string' ? { kind: 'generic' } : options.focus ?? { kind: 'generic' };
+  const includeSpecializedControls = typeof options === 'string' ? false : options.includeSpecializedControls === true;
+  const collectionSettings = typeof options === 'string' ? BROWSER_COLLECTION_SETTINGS[detailLevel] : options.collectionSettings ?? BROWSER_COLLECTION_SETTINGS[detailLevel];
   const settings = DETAIL_SETTINGS[detailLevel] ?? DETAIL_SETTINGS.standard;
   const discoveredEntries = flattenInteractives(raw.interactives);
   const retainedEntries = discoveredEntries.filter(shouldKeepInteractive).sort(compareInteractivePriority);
@@ -422,13 +633,27 @@ export function normalizeRawScan(raw, detailLevel) {
   const regrouped = regroupInteractives(budgetedEntries);
   const enrichedInteractives = enrichInteractives(regrouped, raw);
   const enrichedRetainedEntries = retainedEntries.map((entry) => enrichEntry(entry, raw));
+  const specializedEntries = flattenInteractives(raw.specializedControls ?? {}).filter(shouldKeepInteractive);
+  const groupedSpecialized = regroupSpecialized(
+    specializedEntries.flatMap((entry) => [enrichEntry(entry, raw)]).filter(Boolean)
+  );
+  for (const [groupName, entries] of Object.entries(groupedSpecialized)) {
+    groupedSpecialized[groupName] = pickByLimit(entries, settings.maxSpecializedPerGroup);
+  }
+  const collections = buildCollections(raw, settings);
+  const coverage = buildCoverage(raw, regrouped, groupedSpecialized, settings, collectionSettings);
 
   return {
     ok: true,
-    schemaVersion: 'scan.v2',
+    schemaVersion: 'scan.v3',
     title: raw.title,
     url: raw.url,
     detailLevel,
+    focus: {
+      kind: focus.kind ?? 'generic',
+      targetText: focus.targetText ?? undefined,
+      applied: true,
+    },
     document: buildDocument(raw, detailLevel, settings),
     summary: {
       mainText: clipText(raw.text, settings.mainTextChars),
@@ -438,10 +663,13 @@ export function normalizeRawScan(raw, detailLevel) {
       frames: pickByLimit(raw.frames ?? [], settings.maxFrames),
       shadowHosts: pickByLimit(raw.shadowHosts ?? [], settings.maxShadowHosts),
       retainedInteractiveCount: budgetedEntries.length,
-      discoveredInteractiveCount: detailLevel === 'full' ? discoveredEntries.length : undefined,
+      discoveredInteractiveCount: discoveredEntries.length + specializedEntries.length,
       truncated: retainedEntries.length > budgetedEntries.length,
+      coverage,
     },
-    hints: buildHints(raw, enrichedRetainedEntries, detailLevel, settings),
+    hints: buildHints(raw, enrichedRetainedEntries, detailLevel, settings, collections),
     interactives: enrichedInteractives,
+    specializedControls: includeSpecializedControls ? groupedSpecialized : regroupSpecialized([]),
+    collections,
   };
 }

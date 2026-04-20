@@ -2,7 +2,7 @@ export function browserWaitForStability({
   settleMs,
   minObserveMs,
   stabilityKey,
-  stateKey = '__agentBrowserStability',
+  stateKey = '__pagePilotStability',
 }) {
   const compact = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
   const roots = [document];

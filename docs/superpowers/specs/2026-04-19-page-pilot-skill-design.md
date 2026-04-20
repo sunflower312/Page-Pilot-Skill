@@ -95,6 +95,55 @@
 
 Skill 文案、参考文档、MCP 工具描述都必须引用同一套契约，不允许出现多套口径。
 
+### 4.5 顶层 success / failure envelope 语义
+
+所有公共工具必须统一顶层 envelope 语义：
+
+- `ok: false` 只表示工具调用失败、输入非法、session 不存在或系统异常
+- 只要工具调用本身成功，顶层一律返回 `ok: true`
+- 业务结果必须进入业务字段，不得复用顶层 `ok`
+
+示例：
+
+- `browser_validate_playwright` 使用 `validation.passed`
+- `browser_repair_playwright` 使用 `repair.repaired`
+- `browser_rank_locators` 使用 `matchCount`
+- `browser_scan` 使用 `result` / `status` / schema 字段表达结构化结果
+
+不允许再出现“文档示例写了 `ok: true`，实现却不返回”或“验证失败被当成工具失败”的漂移。
+
+### 4.6 契约示例必须进入自动校验范围
+
+`docs/contracts.md` 和 `docs/tools/*.md` 中的示例 JSON 不能只靠人工维护。
+
+主线要求至少包括：
+
+- fenced JSON 示例可被解析
+- 关键公共工具存在示例字段快照测试
+- `docs/contracts.md` 与对应 `docs/tools/*.md` 的关键结构保持一致
+
+优先锁住的工具：
+
+- `browser_scan`
+- `browser_rank_locators`
+- `browser_validate_playwright`
+- `browser_generate_playwright`
+- `browser_repair_playwright`
+
+### 4.7 Locator fallback 输出一致性
+
+任何带 fallback 的 locator 逻辑都必须满足：
+
+- `locator`
+- `playwrightExpression`
+- `matchCount`
+
+三者来自同一条最终生效 locator。
+
+尤其是 role-based locator 在 `exact: true` miss、`exact: false` hit 时，不允许出现“对外表达式仍显示 exact，但计数来自 fuzzy fallback”的不一致。
+
+这条约束必须通过单元测试锁死。
+
 ## 5. 页面语义对象模型
 
 `browser_scan` 的输出必须被定义为**语义对象模型**，而不是“增强 DOM 扫描结果”。
@@ -257,6 +306,19 @@ probe 只用于补足 scan 难以直接表达的信息，例如：
 - locator 替换
 - 等待调整
 - assertion 调整
+
+## 9. 工程化收尾要求
+
+在主闭环成立后，仓库仍需完成最后一轮工程化收尾，避免继续维持“能力对，但细节仍松”的状态。
+
+后续收尾重点包括：
+
+- 公共 envelope 语义彻底统一
+- 契约示例进入自动测试
+- role fallback 一致性补测试
+- `browser_scan v3` 协议升级
+- 最后一批旧 `Agent Browser` 内部命名清理
+- `doctor` 升级为更完整的开发环境自检入口
 
 不允许：
 

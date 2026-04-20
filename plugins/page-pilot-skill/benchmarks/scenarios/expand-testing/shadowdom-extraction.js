@@ -48,7 +48,11 @@ export const scenario = {
           details: extraction.data,
         };
       },
-      { url: 'https://practice.expandtesting.com/shadowdom' }
+      {
+        url: 'https://practice.expandtesting.com/shadowdom',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 30000,
+      }
     );
 
     return finalizeScenario(sessionRun);

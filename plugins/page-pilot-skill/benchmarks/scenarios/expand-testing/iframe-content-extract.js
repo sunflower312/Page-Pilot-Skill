@@ -66,7 +66,11 @@ export const scenario = {
           details: extraction.data,
         };
       },
-      { url: 'https://practice.expandtesting.com/iframe' }
+      {
+        url: 'https://practice.expandtesting.com/iframe',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 30000,
+      }
     );
 
     return finalizeScenario(sessionRun);

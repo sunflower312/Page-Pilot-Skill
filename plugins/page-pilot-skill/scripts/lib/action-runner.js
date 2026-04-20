@@ -65,7 +65,10 @@ async function captureLocatorCodegenEvidence(page, locator) {
     };
   }
 
-  const scan = await collectStructuredPageData(page, { detailLevel: 'standard' }).catch(() => null);
+  const scan = await collectStructuredPageData(page, {
+    detailLevel: 'standard',
+    includeSpecializedControls: true,
+  }).catch(() => null);
   if (!scan) {
     return {
       locatorRanking: [],

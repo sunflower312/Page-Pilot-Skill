@@ -77,7 +77,7 @@ export async function captureActionStabilityBaseline(page) {
 
 async function waitForObservedStability(page, { settleMs, minObserveMs, timeoutMs, startedAt, stabilityKey }) {
   const polling = Math.min(100, settleMs);
-  const stateKey = '__agentBrowserStability';
+  const stateKey = '__pagePilotStability';
 
   while (Date.now() - startedAt < timeoutMs) {
     const remainingMs = timeoutMs - (Date.now() - startedAt);

@@ -16,6 +16,7 @@ const pluginRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 function createFakeClient(log, options = {}) {
   let closeAttempt = 0;
+  let openAttempt = 0;
   return {
     async connect() {
       log.push('connect');
@@ -38,6 +39,13 @@ function createFakeClient(log, options = {}) {
     },
     async openSession(openOptions) {
       log.push({ name: 'browser_open', args: openOptions });
+      if (Array.isArray(options.openSessionResults)) {
+        const response =
+          options.openSessionResults[Math.min(openAttempt, options.openSessionResults.length - 1)] ??
+          { ok: true, sessionId: options.sessionId ?? 'session-1', url: openOptions.url, title: 'Fixture Page' };
+        openAttempt += 1;
+        return response;
+      }
       return { ok: true, sessionId: options.sessionId ?? 'session-1', url: openOptions.url, title: 'Fixture Page' };
     },
     async closeSession(sessionId) {
@@ -57,6 +65,72 @@ function createFakeClient(log, options = {}) {
     },
   };
 }
+
+test('runBenchmarks retries transient browser_open failures before failing the scenario', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-retry-open-'));
+  const calls = [];
+
+  const run = await runBenchmarks({
+    registry: [
+      {
+        id: 'retry-site',
+        name: 'Retry Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/retry',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/retry'], notes: [] },
+        scenarios: [
+          {
+            id: 'retry-open',
+            title: 'Retry transient browser_open failure',
+            status: 'qualified',
+            module: './demo/retry-open.js',
+            tags: ['smoke'],
+            guide: {
+              steps: ['Open page even if the first navigation attempt times out'],
+              expectedResult: 'Scenario succeeds after an automatic retry.',
+              failureModes: ['Transient browser_open failures abort the scenario immediately.'],
+            },
+          },
+        ],
+      },
+    ],
+    outputDir,
+    clientFactory: async () =>
+      createFakeClient(calls, {
+        openSessionResults: [
+          {
+            ok: false,
+            error: {
+              code: 'BROWSER_OPEN_FAILED',
+              message: 'page.goto: Timeout 15000ms exceeded.',
+            },
+          },
+          { ok: true, sessionId: 'session-retry', url: 'https://example.test/retry', title: 'Retry Page' },
+        ],
+      }),
+    moduleLoader: async (moduleId) => {
+      if (moduleId !== './demo/retry-open.js') {
+        throw new Error(`Unexpected module request: ${moduleId}`);
+      }
+
+      return {
+        scenario: {
+          async run(context) {
+            await context.withSession({}, async () => {});
+            return {
+              summary: 'Scenario recovered from a transient open failure.',
+            };
+          },
+        },
+      };
+    },
+  });
+
+  assert.equal(run.acceptance.ok, true);
+  assert.equal(run.summary.passed, 1);
+  assert.equal(calls.filter((entry) => entry?.name === 'browser_open').length, 2);
+});
 
 test('runBenchmarks executes only qualified scenarios and writes acceptance reports', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-'));

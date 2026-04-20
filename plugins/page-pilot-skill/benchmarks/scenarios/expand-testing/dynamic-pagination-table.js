@@ -87,7 +87,11 @@ export const scenario = {
           },
         };
       },
-      { url: 'https://practice.expandtesting.com/dynamic-pagination-table' }
+      {
+        url: 'https://practice.expandtesting.com/dynamic-pagination-table',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 30000,
+      }
     );
 
     return finalizeScenario(sessionRun);

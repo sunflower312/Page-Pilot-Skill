@@ -51,7 +51,11 @@ export const scenario = {
           },
         };
       },
-      { url: 'https://practice.expandtesting.com/register' }
+      {
+        url: 'https://practice.expandtesting.com/register',
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 30000,
+      }
     );
 
     return finalizeScenario(sessionRun);

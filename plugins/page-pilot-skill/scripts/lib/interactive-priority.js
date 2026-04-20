@@ -27,7 +27,7 @@ export const INTERACTIVE_PRIORITY_CONFIG = Object.freeze({
   }),
 });
 
-export function createInteractivePriorityRuntime({ config } = {}) {
+export function createInteractivePriorityRuntime({ config, focus } = {}) {
   const groupDefaultRole = {
     buttons: 'button',
     links: 'link',
@@ -35,6 +35,14 @@ export function createInteractivePriorityRuntime({ config } = {}) {
     selects: 'combobox',
     textareas: 'textbox',
     checkboxes: 'checkbox',
+    radios: 'radio',
+    switches: 'switch',
+    sliders: 'slider',
+    tabs: 'tab',
+    options: 'option',
+    menuItems: 'menuitem',
+    fileInputs: 'button',
+    dateInputs: 'textbox',
   };
   const roleGroup = {
     button: 'buttons',
@@ -43,8 +51,15 @@ export function createInteractivePriorityRuntime({ config } = {}) {
     searchbox: 'inputs',
     combobox: 'selects',
     checkbox: 'checkboxes',
+    radio: 'radios',
+    switch: 'switches',
+    slider: 'sliders',
+    tab: 'tabs',
+    option: 'options',
+    menuitem: 'menuItems',
   };
   const resolvedConfig = config ?? INTERACTIVE_PRIORITY_CONFIG;
+  const focusKind = focus?.kind ?? 'generic';
   const patterns = {
     forwardAction: new RegExp(resolvedConfig.patterns?.forwardAction ?? '', 'i'),
     secondaryAction: new RegExp(resolvedConfig.patterns?.secondaryAction ?? '', 'i'),
@@ -229,6 +244,34 @@ export function createInteractivePriorityRuntime({ config } = {}) {
       score += scores.chromeLink ?? 0;
     }
 
+    if (focusKind === 'form_fill') {
+      if (['inputs', 'selects', 'textareas', 'checkboxes', 'radios', 'fileInputs', 'dateInputs'].includes(entry.group)) {
+        score += 18;
+      }
+      if (entry.group === 'buttons' && (entry.isSubmitControl === true || hasForwardWorkflowActionText(entry))) {
+        score += 14;
+      }
+    }
+
+    if (focusKind === 'dialog') {
+      if (entry.withinDialog) {
+        score += 18;
+      }
+    }
+
+    if (focusKind === 'search_results' || focusKind === 'table_actions') {
+      if (entry.localContext?.table || entry.localContext?.list) {
+        score += 14;
+      }
+      if (entry.group === 'buttons' || entry.group === 'links') {
+        score += 6;
+      }
+    }
+
+    if (focusKind === 'navigation' && entry.group === 'links') {
+      score += 10;
+    }
+
     return score;
   }
 
@@ -286,7 +329,7 @@ export const BROWSER_INTERACTIVE_RUNTIME_SOURCE = createInteractivePriorityRunti
 
 export function instantiateInteractivePriorityRuntime(payload = {}) {
   const factory = Function(`return (${payload.interactiveRuntimeSource})`)();
-  return factory({ config: payload.interactivePriorityConfig });
+  return factory({ config: payload.interactivePriorityConfig, focus: payload.focus });
 }
 
 export const BROWSER_INTERACTIVE_RUNTIME_INSTANTIATOR_SOURCE = instantiateInteractivePriorityRuntime.toString();

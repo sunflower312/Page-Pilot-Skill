@@ -60,7 +60,8 @@ When writing or fixing Playwright:
 
 ## Tool Usage Rules
 
-- `browser_scan` is the default first tool for page understanding. It returns `document`, `summary`, `hints`, and grouped `interactives`.
+- `browser_scan` is the default first tool for page understanding. It returns `document`, `summary`, `hints`, grouped `interactives`, optional `specializedControls`, first-pass `collections`, and provenance fields that explain where semantic names came from.
+- `browser_scan` also supports optional `focus` and budgeted `verification` when you need scan-time evidence without jumping straight into a full validation run.
 - `browser_rank_locators` should be used when the scan returns multiple plausible elements and you need a page-backed locator order rather than a guess.
 - `browser_probe` is for targeted readonly inspection, not whole-page dumping or autonomous page control.
 - `browser_validate_playwright` should validate a concrete hypothesis, not replay a huge end-to-end script.

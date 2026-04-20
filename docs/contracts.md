@@ -53,7 +53,17 @@
 ```json
 {
   "sessionId": "session-123",
-  "detailLevel": "standard"
+  "detailLevel": "standard",
+  "focus": {
+    "kind": "form_fill",
+    "targetText": "workspace"
+  },
+  "includeSpecializedControls": true,
+  "verification": {
+    "enabled": true,
+    "maxPerElement": 1,
+    "groups": ["buttons", "inputs"]
+  }
 }
 ```
 
@@ -61,26 +71,99 @@
 
 ```json
 {
+  "ok": true,
+  "schemaVersion": "scan.v3",
   "url": "https://example.com/",
   "title": "Example Domain",
+  "focus": {
+    "kind": "form_fill",
+    "targetText": "workspace",
+    "applied": true
+  },
+  "summary": {
+    "retainedInteractiveCount": 6,
+    "discoveredInteractiveCount": 11,
+    "truncated": true,
+    "coverage": {
+      "discoveredByGroup": {
+        "buttons": 4,
+        "links": 1,
+        "inputs": 3,
+        "selects": 1,
+        "textareas": 0,
+        "checkboxes": 1,
+        "specialized": {
+          "radios": 1,
+          "switches": 1,
+          "sliders": 0,
+          "tabs": 0,
+          "options": 0,
+          "menuItems": 0,
+          "fileInputs": 0,
+          "dateInputs": 0
+        }
+      }
+    }
+  },
   "interactives": {
     "buttons": [
       {
         "role": "button",
         "accessibleName": "Submit",
         "visibleText": "Submit",
+        "provenance": {
+          "roleSource": "native_tag",
+          "nameSource": "inner-text",
+          "labelSource": "none",
+          "descriptionSource": "none",
+          "origin": "document"
+        },
         "recommendedLocators": [
           {
-            "strategy": "role",
-            "value": {
-              "role": "button",
-              "name": "Submit",
-              "exact": true
+            "locator": {
+              "strategy": "role",
+              "value": {
+                "role": "button",
+                "name": "Submit",
+                "exact": true
+              }
+            },
+            "score": 0.92,
+            "confidence": "high",
+            "reasons": ["semantic_role_name", "form_scope"],
+            "playwrightExpression": "page.getByRole(\"button\", { name: \"Submit\", exact: true })",
+            "matchCount": null,
+            "stabilityReason": "semantic_role_name",
+            "fallbackReason": null,
+            "verification": {
+              "attempted": true,
+              "unique": true,
+              "matchCount": 1,
+              "visible": true,
+              "enabled": true,
+              "action": "click",
+              "source": "scan"
             }
           }
         ]
       }
     ]
+  },
+  "specializedControls": {
+    "radios": [],
+    "switches": [],
+    "sliders": [],
+    "tabs": [],
+    "options": [],
+    "menuItems": [],
+    "fileInputs": [],
+    "dateInputs": []
+  },
+  "collections": {
+    "tables": [],
+    "lists": [],
+    "cards": [],
+    "resultRegions": []
   }
 }
 ```
@@ -113,18 +196,27 @@
 
 ```json
 {
+  "ok": true,
   "matches": [
     {
       "locatorType": "role",
       "playwrightExpression": "page.getByRole(\"button\", { name: \"Submit\", exact: true })",
       "matchCount": 1,
-      "stabilityReason": "role_name_unique",
+      "stabilityReason": "semantic_role_name",
       "fallbackReason": null,
       "confidence": {
         "score": 0.98
       },
       "locatorChoices": [
         {
+          "locator": {
+            "strategy": "role",
+            "value": {
+              "role": "button",
+              "name": "Submit",
+              "exact": true
+            }
+          },
           "locatorType": "role",
           "playwrightExpression": "page.getByRole(\"button\", { name: \"Submit\", exact: true })",
           "matchCount": 1,
