@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -53,7 +53,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the dynamic pagination table page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Read the first pagination snapshot',
@@ -64,10 +64,10 @@ export const scenario = {
             firstStudent: data.firstRow?.[0] ?? null,
           })
         );
-        await runActions(context, sessionId, 'Move to the next table page', [
+        await validatePlaywright(context, sessionId, 'Move to the next table page', [
           { type: 'click', locator: { strategy: 'css', value: '#example_next a' } },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify the next pagination snapshot',

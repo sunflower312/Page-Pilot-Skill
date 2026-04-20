@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -50,11 +50,11 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the hockey search and pagination page', 'brief');
-        await runActions(context, sessionId, 'Advance to the second pagination page', [
+        await validatePlaywright(context, sessionId, 'Advance to the second pagination page', [
           { type: 'click', locator: { strategy: 'css', value: '.pagination a[href$="page_num=2"]' } },
           { type: 'assert_url', value: 'page_num=2' },
         ]);
-        const paged = await executeScript(
+        const paged = await runProbe(
           context,
           sessionId,
           'Verify page-two hockey rows',
@@ -65,12 +65,12 @@ export const scenario = {
             firstTeam: data.firstRow?.[0] ?? null,
           })
         );
-        await runActions(context, sessionId, 'Search for Toronto teams', [
+        await validatePlaywright(context, sessionId, 'Search for Toronto teams', [
           { type: 'fill', locator: { strategy: 'css', value: '#q' }, value: 'Toronto' },
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Search' } } },
           { type: 'assert_url', value: 'q=Toronto' },
         ]);
-        const filtered = await executeScript(
+        const filtered = await runProbe(
           context,
           sessionId,
           'Verify filtered Toronto results',

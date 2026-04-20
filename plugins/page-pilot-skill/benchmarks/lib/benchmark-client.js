@@ -27,6 +27,7 @@ export class BenchmarkClient {
     this.command = options.command ?? 'node';
     this.args = options.args ?? ['scripts/mcp-server.js'];
     this.cwd = options.cwd ?? defaultPluginRoot;
+    this.env = options.env ?? { ...process.env, PAGE_PILOT_INTERNAL_PROBE: '1' };
     this.clientName = options.clientName ?? 'page-pilot-skill-benchmarks';
     this.clientVersion = options.clientVersion ?? '0.1.0';
     this.transport = null;
@@ -42,6 +43,7 @@ export class BenchmarkClient {
       command: this.command,
       args: this.args,
       cwd: this.cwd,
+      env: this.env,
       stderr: 'pipe',
     });
     this.client = new Client(

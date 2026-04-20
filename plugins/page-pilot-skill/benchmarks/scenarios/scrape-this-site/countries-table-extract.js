@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -31,7 +31,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the countries table page', 'brief');
-        const extraction = await executeScript(
+        const extraction = await runProbe(
           context,
           sessionId,
           'Extract the countries table',

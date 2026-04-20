@@ -1,5 +1,5 @@
 version: 1
 interface:
   display_name: Page Pilot Skill
-  description: Headless Playwright tools and workflows for Codex web inspection
-  prompt_hint: Inspect a page headlessly, gather evidence, and help write automation
+  description: Semantic page analysis, locator ranking, interaction validation, and Playwright code generation for Codex
+  prompt_hint: Scan a page, rank locator options, validate key interactions, generate Playwright from validated evidence, and repair weak code paths

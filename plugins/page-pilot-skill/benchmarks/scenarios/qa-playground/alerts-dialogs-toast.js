@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -29,10 +29,10 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the alerts and dialogs page', 'brief');
-        await runActions(context, sessionId, 'Trigger the toast alert', [
+        await validatePlaywright(context, sessionId, 'Trigger the toast alert', [
           { type: 'click', locator: { strategy: 'testId', value: 'btn-toast-alert' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Wait for the toast alert',

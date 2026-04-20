@@ -60,6 +60,84 @@ test('runActions executes fill, click, wait_for, and assert_text in order', asyn
   assert.equal(result.steps[3].ok, true);
 });
 
+test('runActions resolves runtime tokens consistently across fill and assertion steps', async () => {
+  const calls = [];
+  let submittedEmail = '';
+  const page = {
+    getByLabel(value) {
+      return {
+        async fill(input) {
+          submittedEmail = input;
+          calls.push(['fill', value, input]);
+        },
+      };
+    },
+    getByRole(role, options = {}) {
+      return {
+        async click() {
+          calls.push(['click', role, options.name]);
+        },
+      };
+    },
+    locator(selector) {
+      return {
+        async evaluate(callback) {
+          calls.push(['evaluate', selector]);
+          return callback({
+            tagName: 'P',
+            textContent: `Thanks ${submittedEmail}`,
+          });
+        },
+      };
+    },
+    url() {
+      return 'http://fixture.local/';
+    },
+    async title() {
+      return 'Fixture';
+    },
+  };
+
+  const result = await runActions(page, [
+    { type: 'fill', locator: { strategy: 'label', value: 'Email' }, value: '{{pagePilot.uniqueEmail}}' },
+    { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Submit' } } },
+    { type: 'assert_text', locator: { strategy: 'css', value: '#message' }, value: 'Thanks {{pagePilot.uniqueEmail}}' },
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.match(calls[0][2], /^pp.+@example\.test$/);
+  assert.equal(result.steps[0].value, '{{pagePilot.uniqueEmail}}');
+  assert.equal(result.steps[0].resolvedValue, calls[0][2]);
+  assert.equal(result.steps[2].resolvedValue, `Thanks ${calls[0][2]}`);
+});
+
+test('runActions resolves runtime tokens consistently across navigate and assert_url steps', async () => {
+  const calls = [];
+  let currentUrl = 'http://fixture.local/';
+  const page = {
+    async goto(url) {
+      currentUrl = url;
+      calls.push(['goto', url]);
+    },
+    url() {
+      return currentUrl;
+    },
+    async title() {
+      return 'Fixture';
+    },
+  };
+
+  const result = await runActions(page, [
+    { type: 'navigate', url: 'http://fixture.local/session/{{pagePilot.uniqueId}}', waitUntil: 'commit' },
+    { type: 'assert_url', value: '/session/{{pagePilot.uniqueId}}' },
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.match(calls[0][1], /^http:\/\/fixture\.local\/session\/pp[a-z0-9]+$/);
+  assert.equal(result.steps[0].url, 'http://fixture.local/session/{{pagePilot.uniqueId}}');
+  assert.equal(result.steps[1].value, '/session/{{pagePilot.uniqueId}}');
+});
+
 test('runActions supports rich locator strategies and extended action types', async () => {
   const calls = [];
   const page = {
@@ -148,6 +226,52 @@ test('runActions supports rich locator strategies and extended action types', as
   assert.equal(result.finalUrl, 'http://fixture.local/next-page.html');
   assert.equal(result.finalTitle, 'Next Page');
   assert.equal(result.steps[6].path, '/tmp/results.png');
+});
+
+test('runActions resolves select option position tokens against the current select element', async () => {
+  const calls = [];
+  const page = {
+    locator(selector) {
+      return {
+        async evaluate(callback, position) {
+          calls.push(['evaluateSelect', selector, position]);
+          return callback(
+            {
+              options: [
+                { value: '11111', label: '11111', textContent: '11111' },
+                { value: '22222', label: '22222', textContent: '22222' },
+              ],
+            },
+            position
+          );
+        },
+        async selectOption(option) {
+          calls.push(['selectCss', selector, option]);
+        },
+      };
+    },
+    url() {
+      return 'http://fixture.local/transfer';
+    },
+    async title() {
+      return 'Transfer';
+    },
+  };
+
+  const result = await runActions(page, [
+    { type: 'select', locator: { strategy: 'css', value: '#fromAccountId' }, value: '{{pagePilot.option:first}}' },
+    { type: 'select', locator: { strategy: 'css', value: '#toAccountId' }, value: '{{pagePilot.option:last}}' },
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [
+    ['evaluateSelect', '#fromAccountId', 'first'],
+    ['selectCss', '#fromAccountId', '11111'],
+    ['evaluateSelect', '#toAccountId', 'last'],
+    ['selectCss', '#toAccountId', '22222'],
+  ]);
+  assert.equal(result.steps[0].resolvedValue, '11111');
+  assert.equal(result.steps[1].resolvedValue, '22222');
 });
 
 test('runActions preserves navigate waitUntil on recorded steps', async () => {

@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -41,12 +41,12 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the radio and checkbox page', 'brief');
-        await runActions(context, sessionId, 'Toggle the radio and checkbox controls', [
+        await validatePlaywright(context, sessionId, 'Toggle the radio and checkbox controls', [
           { type: 'check', locator: { strategy: 'css', value: '#radio-foo' } },
           { type: 'click', locator: { strategy: 'testId', value: 'checkbox-remember-me' } },
           { type: 'click', locator: { strategy: 'testId', value: 'checkbox-terms' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the selected radio and toggled checkbox states',

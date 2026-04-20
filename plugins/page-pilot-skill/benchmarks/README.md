@@ -2,11 +2,11 @@
 
 > 2026-04-19 定位更新：本 benchmark 套件现在主要用于衡量 `page-pilot-skill` 作为“帮助模型编写更可靠 Playwright / 网页自动化代码的语义辅助工具”时的页面理解、locator 质量、代码生成与生成后验证能力，而不是验证一个通用浏览器代理能否长期自主完成复杂网站任务。
 
-This directory contains the local acceptance suite for the `page-pilot-skill` MCP server. It is intentionally separate from the default `node --test` discovery path. The benchmark runner treats `scripts/mcp-server.js` as a black box over stdio and validates the real headless browser workflow against public practice, demo, and sandbox websites.
+This directory contains the local acceptance suite for the `page-pilot-skill` MCP server. It is intentionally separate from the default `node --test` discovery path. The benchmark runner treats `scripts/mcp-server.js` as a black box over stdio and validates page understanding, locator quality, interaction validation evidence, and generated Playwright quality against public practice, demo, and sandbox websites.
 
 ## Scope and Philosophy
 
-This benchmark suite exists to validate real cross-site capability, not synthetic business flows. The repository may still keep small local fixtures for low-level mechanism tests, but workflow-style acceptance evidence now comes from live public benchmark sites only.
+This benchmark suite exists to validate code generation quality against real public pages, not synthetic business flows or autonomous browser-agent completion rates. The repository may still keep small local fixtures for low-level mechanism tests, but acceptance evidence now comes from live public benchmark sites only.
 
 The default acceptance run executes every `qualified` scenario across the current real-site registry:
 
@@ -28,7 +28,8 @@ The current Beta gate expects:
 - 49 qualified executable scenarios
 - at most 1 pending scenario
 - per-site depth across the full registry, not just a single smoke scenario
-- a coverage matrix that keeps the benchmark broad enough to catch regressions in extraction, pagination, async timing, forms/auth, dialogs/visibility, iframe/shadow DOM, stateful workflows, and locator resilience
+- enough validated scenarios to produce stable code-quality evidence
+- a code-quality gate that tracks semantic locator ratio, CSS fallback ratio, unique locator hit rate, validated-plan first-pass rate, generated-plan validation pass rate, repair pass rate, and generated code length
 
 The registry can still contain `pending` scenarios when a live public sandbox is temporarily broken or exposes a server-side defect. Those scenarios stay visible in reports, but they do not participate in the default acceptance gate until the site is healthy again. At the moment, the ParaBank `bill-pay` scenario is tracked this way because the live sandbox exposed no source-account options during qualification.
 
@@ -40,9 +41,11 @@ Each site manifest records:
 - scenario steps, expected results, and failure modes
 - executable metadata such as the benchmark command, module identifier, and source path
 
-Each scenario module uses MCP browser tools such as `browser_open`, `browser_scan`, `browser_run_actions`, `browser_execute_js`, and `browser_capture_screenshot`. They do not access Playwright `page` objects directly.
+Each scenario module uses MCP browser tools such as `browser_open`, `browser_scan`, `browser_rank_locators`, `browser_probe`, `browser_validate_playwright`, `browser_generate_playwright`, `browser_repair_playwright`, and `browser_capture_screenshot`. They do not access Playwright `page` objects directly. For benchmark-internal read-only extraction, the harness may also use a private script probe tool that is not part of the public Page Pilot Skill contract.
 
-## Covered Capability Areas
+If a third-party practice site is temporarily unavailable and opens with a known external error page, the runner records that scenario as `EXTERNAL_SITE_UNAVAILABLE`. Those scenarios are still reported, but they are excluded from the acceptance and code-quality denominators for that run so site outages do not masquerade as product regressions.
+
+## Covered Scenario Areas
 
 Across the full registry, the benchmark suite now covers these headless-relevant capability areas:
 
@@ -61,16 +64,17 @@ Across the full registry, the benchmark suite now covers these headless-relevant
 - dynamic label mapping
 - stateful multi-page flows
 
-The current Beta-level capability matrix is enforced in `benchmarks/lib/coverage-matrix.js`. The acceptance suite now gates:
+The current Beta-level quality gate is enforced in `benchmarks/lib/coverage-matrix.js`, and `npm run benchmark` exits non-zero when either scenario acceptance or the Beta code-quality gate fails. The acceptance suite now gates:
 
-- content extraction across 8 or more sites
-- pagination and growth flows across 5 or more sites
-- async waiting behaviors across 5 or more sites
-- forms and authentication across 7 or more sites
-- dialogs and visibility transitions across 4 or more sites
-- iframe and shadow DOM handling across 5 or more sites
-- stateful workflows across 2 or more sites
-- locator resilience across 6 or more sites
+- registry breadth and per-site scenario depth
+- scenarios that emit code-quality evidence
+- semantic locator ratio
+- CSS fallback ratio
+- unique locator hit rate
+- validated-plan first pass rate
+- generated-plan validation pass rate
+- repair pass rate when repairs are attempted
+- average generated code length
 
 ## Commands
 
@@ -90,18 +94,19 @@ npm run benchmark:test
 The CLI summary also prints the current coverage counts and whether the Beta gate passed, so a local run immediately answers both:
 
 - did the selected scenarios pass
-- does the overall benchmark matrix still satisfy the Beta floor
+- does the overall code-quality benchmark still satisfy the Beta floor
 
 `npm run benchmark:test` runs the benchmark runner self-checks only. These files intentionally use `*.check.js` so they do not fall into the default `node --test` auto-discovery path used by `npm test`.
 
 ## Acceptance Gate
 
-The CLI exits with code `0` only when every selected and runnable benchmark scenario passes. It exits with code `1` when:
+The CLI exits with code `0` only when every selected and runnable benchmark scenario passes **and** the Beta code-quality gate passes. It exits with code `1` when:
 
 - no qualified scenarios match the current filters
 - selected scenarios do not execute
 - selected scenarios execute but none pass
 - any selected scenario fails or is skipped
+- the Beta code-quality gate fails even though the runnable scenarios themselves passed
 
 This makes the suite behave like a real acceptance gate rather than a best-effort smoke run.
 
@@ -114,8 +119,12 @@ The Markdown report is organized as:
 - planned steps
 - expected result
 - failure modes
-- executable test code
+- benchmark harness source
+- generated Playwright code
+- code-quality gate summary
 - runtime steps
 - artifacts and errors
+
+When generated-code verification fails, the report still preserves the generated Playwright snippet alongside the failure so the broken code path remains inspectable.
 
 The JSON report is the canonical machine-readable artifact. It includes the same acceptance metadata, the registry inventory summary, per-scenario execution results, and explicit `executable` fields such as `command`, `moduleId`, and `sourcePath`.

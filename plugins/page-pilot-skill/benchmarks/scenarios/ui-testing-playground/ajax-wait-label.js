@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -27,13 +27,13 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the AJAX waiting page', 'brief');
-      await runActions(context, sessionId, 'Trigger the delayed AJAX request', [
+      await validatePlaywright(context, sessionId, 'Trigger the delayed AJAX request', [
         {
           type: 'click',
           locator: { strategy: 'role', value: { role: 'button', name: 'Button Triggering AJAX Request' } },
         },
       ]);
-      const verification = await executeScript(
+      const verification = await runProbe(
         context,
         sessionId,
         'Wait for the delayed AJAX label',

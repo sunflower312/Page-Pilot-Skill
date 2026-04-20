@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -27,7 +27,7 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the practice form page', 'brief');
-      await runActions(context, sessionId, 'Fill and submit the practice form', [
+      await validatePlaywright(context, sessionId, 'Fill and submit the practice form', [
         { type: 'fill', locator: { strategy: 'testId', value: 'input-first-name' }, value: 'John' },
         { type: 'fill', locator: { strategy: 'testId', value: 'input-last-name' }, value: 'Doe' },
         { type: 'fill', locator: { strategy: 'testId', value: 'input-email' }, value: 'john@example.com' },
@@ -44,7 +44,7 @@ export const scenario = {
         { type: 'check', locator: { strategy: 'testId', value: 'checkbox-terms' } },
         { type: 'click', locator: { strategy: 'testId', value: 'submit-form-btn' } },
       ]);
-      const verification = await executeScript(
+      const verification = await runProbe(
         context,
         sessionId,
         'Verify the success banner and submitted name',

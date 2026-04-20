@@ -21,6 +21,10 @@ import {
 
 import { siteRegistry } from '../registry/sites.js';
 
+export function benchmarkRunSucceeded(run) {
+  return run?.acceptance?.ok === true && run?.coverage?.betaGate?.ok === true;
+}
+
 function cloneSelectedSite(site, scenarios) {
   return {
     id: site.id,
@@ -99,6 +103,18 @@ function createToolFailure(name, response) {
   return error;
 }
 
+function createExternalSiteUnavailableError(response, site, scenario) {
+  const error = new Error(`External benchmark site is unavailable for ${site.id}/${scenario.id}.`);
+  error.code = 'EXTERNAL_SITE_UNAVAILABLE';
+  error.details = {
+    siteId: site.id,
+    scenarioId: scenario.id,
+    url: response?.url ?? response?.source?.finalUrl ?? scenario.entryUrl ?? site.baseUrl,
+    title: response?.title ?? response?.source?.finalTitle ?? null,
+  };
+  return error;
+}
+
 async function closeSessionWithContract(client, sessionId) {
   const response = await client.closeSession(sessionId);
   if (response === false || response?.ok === false) {
@@ -172,6 +188,9 @@ function createScenarioContext({ site, scenario, client, stepRecorder, metrics, 
       if (response?.ok === false || !response?.sessionId) {
         throw createToolFailure('browser_open', response);
       }
+      if (response?.title === 'Application Error') {
+        throw createExternalSiteUnavailableError(response, site, scenario);
+      }
 
       activeSessions.add(response.sessionId);
       metrics.sessionsOpened += 1;
@@ -241,11 +260,20 @@ function baseResult(site, scenario, moduleId) {
     metrics: {
       toolCalls: 0,
       sessionsOpened: 0,
+      codeQuality: null,
     },
     startedAt: null,
     finishedAt: null,
     durationMs: 0,
   };
+}
+
+function extractCodeQualityMetrics(steps = []) {
+  const codeQualityEntries = steps
+    .map((step) => step.details?.codeQuality ?? null)
+    .filter((entry) => entry && typeof entry === 'object');
+
+  return codeQualityEntries.at(-1) ?? null;
 }
 
 async function executeScenario({ site, scenario, ensureClient, moduleLoader }) {
@@ -293,6 +321,14 @@ async function executeScenario({ site, scenario, ensureClient, moduleLoader }) {
       result.status = 'skipped';
       result.reason = createReason('SCENARIO_MODULE_MISSING', `Scenario module is not implemented: ${scenario.module}`);
       result.summary = 'Scenario skipped because its implementation module is missing.';
+    } else if (error?.code === 'EXTERNAL_SITE_UNAVAILABLE') {
+      result.status = 'skipped';
+      result.reason = createReason(
+        'EXTERNAL_SITE_UNAVAILABLE',
+        error.message ?? 'Scenario skipped because the external benchmark site is unavailable.',
+        error.details
+      );
+      result.summary = 'Scenario skipped because the external benchmark site is unavailable.';
     } else {
       result.status = 'failed';
       result.reason = createReason(error?.code ?? 'SCENARIO_EXECUTION_FAILED', error?.message ?? 'Scenario execution failed');
@@ -313,6 +349,7 @@ async function executeScenario({ site, scenario, ensureClient, moduleLoader }) {
       }
     }
     result.steps = stepRecorder.steps;
+    result.metrics.codeQuality = extractCodeQualityMetrics(result.steps);
     const finishedMs = Date.now();
     result.finishedAt = new Date(finishedMs).toISOString();
     result.durationMs = finishedMs - startedMs;
@@ -389,6 +426,7 @@ export async function runBenchmarks(options = {}) {
     run.finishedAt = new Date().toISOString();
     run.summary = summarizeResults(selection.sites, run.results);
     run.acceptance = evaluateAcceptance(run.summary);
+    run.coverage = buildCoverageMatrix(registry, run.results);
 
     if (client && typeof client.close === 'function') {
       await client.close();

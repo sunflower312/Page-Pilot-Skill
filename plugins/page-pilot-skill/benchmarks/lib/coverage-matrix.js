@@ -1,4 +1,6 @@
-import { defineSiteManifest, isQualifiedStatus } from './scenario-helpers.js';
+import { readFileSync } from 'node:fs';
+
+import { defineSiteManifest, isQualifiedStatus, resolveScenarioSourcePath } from './scenario-helpers.js';
 
 export const BETA_BENCHMARK_REQUIREMENTS = {
   qualifiedSiteCount: 11,
@@ -17,24 +19,37 @@ export const BETA_BENCHMARK_REQUIREMENTS = {
     demoqa: 4,
     parabank: 3,
   },
-  capabilityRequirements: [
-    { id: 'content_extraction', minimumScenarioCount: 18, minimumSiteCount: 8 },
-    { id: 'pagination_and_growth', minimumScenarioCount: 8, minimumSiteCount: 5 },
-    { id: 'async_waiting', minimumScenarioCount: 9, minimumSiteCount: 5 },
-    { id: 'forms_and_auth', minimumScenarioCount: 12, minimumSiteCount: 7 },
-    { id: 'dialogs_and_visibility', minimumScenarioCount: 6, minimumSiteCount: 4 },
-    { id: 'iframe_and_shadow', minimumScenarioCount: 8, minimumSiteCount: 5 },
-    { id: 'stateful_workflows', minimumScenarioCount: 4, minimumSiteCount: 2 },
-    { id: 'locator_resilience', minimumScenarioCount: 8, minimumSiteCount: 6 },
-  ],
+  codeQuality: {
+    minimumSemanticLocatorRatio: 0.75,
+    maximumCssFallbackRatio: 0.3,
+    minimumUniqueLocatorHitRate: 0.75,
+    minimumFirstValidationPassRate: 0.75,
+    minimumGeneratedValidationPassRate: 0.75,
+    minimumRepairPassRate: 0.75,
+    maximumAverageCodeLineCount: 40,
+  },
 };
 
 function normalizeRegistry(registry = []) {
   return registry.map((site) => defineSiteManifest(site, site.sourceUrl));
 }
 
-function sortedUnique(values) {
-  return [...new Set(values)].sort();
+function inferCodeQualityEligibility(site = {}, scenario = {}) {
+  if (typeof scenario.metadata?.codeQualityEligible === 'boolean') {
+    return scenario.metadata.codeQualityEligible;
+  }
+
+  const sourcePath = resolveScenarioSourcePath(site, scenario);
+  if (!sourcePath) {
+    return false;
+  }
+
+  try {
+    const source = readFileSync(sourcePath, 'utf8');
+    return /\bvalidatePlaywright\s*\(/.test(source);
+  } catch {
+    return false;
+  }
 }
 
 function siteScenarioSummary(site) {
@@ -52,52 +67,74 @@ function siteScenarioSummary(site) {
   };
 }
 
-function buildCapabilityEntries(sites) {
-  const byCapability = new Map();
-
-  for (const site of sites) {
-    for (const scenario of site.scenarios) {
-      if (!isQualifiedStatus(scenario.status)) {
-        continue;
-      }
-
-      const capabilities = Array.isArray(scenario.metadata?.capabilities) ? scenario.metadata.capabilities : [];
-      for (const capability of capabilities) {
-        if (!byCapability.has(capability)) {
-          byCapability.set(capability, {
-            id: capability,
-            siteIds: new Set(),
-            scenarios: [],
-          });
-        }
-
-        const entry = byCapability.get(capability);
-        entry.siteIds.add(site.id);
-        entry.scenarios.push({
-          siteId: site.id,
-          scenarioId: scenario.id,
-        });
-      }
-    }
-  }
-
-  return [...byCapability.values()]
-    .map((entry) => ({
-      id: entry.id,
-      siteCount: entry.siteIds.size,
-      siteIds: sortedUnique([...entry.siteIds]),
-      scenarioCount: entry.scenarios.length,
-      scenarios: entry.scenarios.sort((left, right) => {
-        const leftKey = `${left.siteId}:${left.scenarioId}`;
-        const rightKey = `${right.siteId}:${right.scenarioId}`;
-        return leftKey.localeCompare(rightKey);
-      }),
-    }))
-    .sort((left, right) => left.id.localeCompare(right.id));
+function round(value) {
+  return Number((value ?? 0).toFixed(2));
 }
 
-function evaluateBetaGate(summary, siteDepth, capabilities) {
+function buildCodeQualitySummary(results = []) {
+  const entries = results
+    .map((result) => result.metrics?.codeQuality ?? null)
+    .filter((entry) => entry && typeof entry === 'object');
+
+  const repairAttemptCount = entries.filter((entry) => entry.firstValidationPassed === false).length;
+  const repairSuccessCount = entries.filter((entry) => entry.firstValidationPassed === false && entry.repaired === true).length;
+
+  if (entries.length === 0) {
+    return {
+      scenarioCount: 0,
+      semanticLocatorRatio: 0,
+      cssFallbackRatio: 0,
+      uniqueLocatorHitRate: 0,
+      firstValidationPassRate: 0,
+      generatedValidationPassRate: 0,
+      repairAttemptCount,
+      repairPassRate: repairAttemptCount === 0 ? null : 0,
+      averageCodeLineCount: 0,
+    };
+  }
+
+  const totals = entries.reduce(
+    (accumulator, entry) => ({
+      locatorCount: accumulator.locatorCount + (entry.locatorCount ?? 0),
+      semanticLocatorCount: accumulator.semanticLocatorCount + (entry.semanticLocatorCount ?? 0),
+      cssFallbackCount: accumulator.cssFallbackCount + (entry.cssFallbackCount ?? 0),
+      uniqueLocatorHitCount: accumulator.uniqueLocatorHitCount + (entry.uniqueLocatorHitCount ?? 0),
+      firstValidationPassCount: accumulator.firstValidationPassCount + (entry.firstValidationPassed ? 1 : 0),
+      generatedValidationPassCount: accumulator.generatedValidationPassCount + (entry.generatedValidationPassed ? 1 : 0),
+      codeLineCount: accumulator.codeLineCount + (entry.codeLineCount ?? 0),
+    }),
+    {
+      locatorCount: 0,
+      semanticLocatorCount: 0,
+      cssFallbackCount: 0,
+      uniqueLocatorHitCount: 0,
+      firstValidationPassCount: 0,
+      generatedValidationPassCount: 0,
+      codeLineCount: 0,
+    }
+  );
+
+  return {
+    scenarioCount: entries.length,
+    locatorCount: totals.locatorCount,
+    semanticLocatorCount: totals.semanticLocatorCount,
+    cssFallbackCount: totals.cssFallbackCount,
+    uniqueLocatorHitCount: totals.uniqueLocatorHitCount,
+    semanticLocatorRatio: totals.locatorCount === 0 ? 0 : round(totals.semanticLocatorCount / totals.locatorCount),
+    cssFallbackRatio: totals.locatorCount === 0 ? 0 : round(totals.cssFallbackCount / totals.locatorCount),
+    uniqueLocatorHitRate: totals.locatorCount === 0 ? 0 : round(totals.uniqueLocatorHitCount / totals.locatorCount),
+    firstValidationPassRate: round(totals.firstValidationPassCount / entries.length),
+    generatedValidationPassRate: round(totals.generatedValidationPassCount / entries.length),
+    repairAttemptCount,
+    repairPassRate: repairAttemptCount === 0 ? null : round(repairSuccessCount / repairAttemptCount),
+    averageCodeLineCount: round(totals.codeLineCount / entries.length),
+  };
+}
+
+function evaluateBetaGate(summary, siteDepth, codeQuality) {
   const failures = [];
+  const eligibleQualifiedScenarioCount =
+    summary.codeQualityEligibleScenarioCount - (summary.codeQualityExternalUnavailableSkipped ?? 0);
 
   if (summary.qualifiedSiteCount !== BETA_BENCHMARK_REQUIREMENTS.qualifiedSiteCount) {
     failures.push(
@@ -128,19 +165,49 @@ function evaluateBetaGate(summary, siteDepth, capabilities) {
     }
   }
 
-  for (const requirement of BETA_BENCHMARK_REQUIREMENTS.capabilityRequirements) {
-    const actual = capabilities.find((entry) => entry.id === requirement.id);
-    if (!actual) {
-      failures.push(`missing capability coverage for ${requirement.id}`);
-      continue;
-    }
-    if (actual.scenarioCount < requirement.minimumScenarioCount) {
+  if (codeQuality.scenarioCount < eligibleQualifiedScenarioCount) {
+    failures.push(
+      `code-quality scenarios ${codeQuality.scenarioCount} are below required ${eligibleQualifiedScenarioCount}`
+    );
+  }
+  if (eligibleQualifiedScenarioCount > 0) {
+    if (codeQuality.semanticLocatorRatio < BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumSemanticLocatorRatio) {
       failures.push(
-        `${requirement.id} scenario count ${actual.scenarioCount} is below required ${requirement.minimumScenarioCount}`
+        `semantic locator ratio ${codeQuality.semanticLocatorRatio} is below required ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumSemanticLocatorRatio}`
       );
     }
-    if (actual.siteCount < requirement.minimumSiteCount) {
-      failures.push(`${requirement.id} site count ${actual.siteCount} is below required ${requirement.minimumSiteCount}`);
+    if (codeQuality.cssFallbackRatio > BETA_BENCHMARK_REQUIREMENTS.codeQuality.maximumCssFallbackRatio) {
+      failures.push(
+        `css fallback ratio ${codeQuality.cssFallbackRatio} exceeds allowed ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.maximumCssFallbackRatio}`
+      );
+    }
+    if (codeQuality.uniqueLocatorHitRate < BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumUniqueLocatorHitRate) {
+      failures.push(
+        `unique locator hit rate ${codeQuality.uniqueLocatorHitRate} is below required ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumUniqueLocatorHitRate}`
+      );
+    }
+    if (codeQuality.firstValidationPassRate < BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumFirstValidationPassRate) {
+      failures.push(
+        `first validation pass rate ${codeQuality.firstValidationPassRate} is below required ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumFirstValidationPassRate}`
+      );
+    }
+    if (codeQuality.generatedValidationPassRate < BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumGeneratedValidationPassRate) {
+      failures.push(
+        `generated validation pass rate ${codeQuality.generatedValidationPassRate} is below required ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumGeneratedValidationPassRate}`
+      );
+    }
+    if (
+      codeQuality.repairPassRate !== null &&
+      codeQuality.repairPassRate < BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumRepairPassRate
+    ) {
+      failures.push(
+        `repair pass rate ${codeQuality.repairPassRate} is below required ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumRepairPassRate}`
+      );
+    }
+    if (codeQuality.averageCodeLineCount > BETA_BENCHMARK_REQUIREMENTS.codeQuality.maximumAverageCodeLineCount) {
+      failures.push(
+        `average generated code line count ${codeQuality.averageCodeLineCount} exceeds allowed ${BETA_BENCHMARK_REQUIREMENTS.codeQuality.maximumAverageCodeLineCount}`
+      );
     }
   }
 
@@ -150,22 +217,42 @@ function evaluateBetaGate(summary, siteDepth, capabilities) {
   };
 }
 
-export function buildCoverageMatrix(registry = []) {
+export function buildCoverageMatrix(registry = [], results = []) {
   const sites = normalizeRegistry(registry);
   const siteDepth = sites.map(siteScenarioSummary).sort((left, right) => left.id.localeCompare(right.id));
-  const capabilities = buildCapabilityEntries(sites);
+  const externalUnavailableSkipped = results.filter(
+    (result) => result.status === 'skipped' && result.reason?.code === 'EXTERNAL_SITE_UNAVAILABLE'
+  ).length;
+  const codeQualityEligibleScenarios = sites.flatMap((site) =>
+    site.scenarios
+      .filter((scenario) => isQualifiedStatus(site.status) && isQualifiedStatus(scenario.status) && inferCodeQualityEligibility(site, scenario))
+      .map((scenario) => `${site.id}/${scenario.id}`)
+  );
+  const codeQualityEligibleScenarioSet = new Set(codeQualityEligibleScenarios);
+  const codeQualityExternalUnavailableSkipped = results.filter(
+    (result) =>
+      result.status === 'skipped' &&
+      result.reason?.code === 'EXTERNAL_SITE_UNAVAILABLE' &&
+      codeQualityEligibleScenarioSet.has(`${result.siteId}/${result.scenarioId}`)
+  ).length;
   const summary = {
     siteCount: sites.length,
     qualifiedSiteCount: sites.filter((site) => isQualifiedStatus(site.status)).length,
     qualifiedScenarioCount: siteDepth.reduce((total, site) => total + site.qualifiedScenarioCount, 0),
     pendingScenarioCount: siteDepth.reduce((total, site) => total + site.pendingScenarioCount, 0),
     excludedScenarioCount: siteDepth.reduce((total, site) => total + site.excludedScenarioCount, 0),
+    codeQualityEligibleScenarioCount: codeQualityEligibleScenarios.length,
+    codeQualityExternalUnavailableSkipped,
+    externalUnavailableSkipped,
   };
+  const codeQuality = buildCodeQualitySummary(
+    results.filter((result) => codeQualityEligibleScenarioSet.has(`${result.siteId}/${result.scenarioId}`))
+  );
 
   return {
     summary,
     siteDepth,
-    capabilities,
-    betaGate: evaluateBetaGate(summary, siteDepth, capabilities),
+    codeQuality,
+    betaGate: evaluateBetaGate(summary, siteDepth, codeQuality),
   };
 }

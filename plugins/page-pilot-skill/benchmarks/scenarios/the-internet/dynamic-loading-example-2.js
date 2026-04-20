@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -28,10 +28,10 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the dynamic-loading example page', 'brief');
-        await runActions(context, sessionId, 'Start the delayed loading example', [
+        await validatePlaywright(context, sessionId, 'Start the delayed loading example', [
           { type: 'click', locator: { strategy: 'css', value: '#start button' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Wait for Hello World to appear',

@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -23,18 +23,17 @@ const verifyRegistrationScript = `
 
 export const scenario = {
   async run(context) {
-    const username = `bench${Date.now()}`;
     const sessionRun = await withScenarioSession(
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the register page', 'brief');
-        await runActions(context, sessionId, 'Register a fresh practice account', [
-          { type: 'fill', locator: { strategy: 'css', value: '#username' }, value: username },
+        await validatePlaywright(context, sessionId, 'Register a fresh practice account', [
+          { type: 'fill', locator: { strategy: 'css', value: '#username' }, value: '{{pagePilot.uniqueUsername:expand-register}}' },
           { type: 'fill', locator: { strategy: 'css', value: '#password' }, value: 'secret12345' },
           { type: 'fill', locator: { strategy: 'css', value: '#confirmPassword' }, value: 'secret12345' },
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Register' } } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the registration success state',
@@ -46,9 +45,8 @@ export const scenario = {
         );
         addArtifact(await captureScreenshot(context, sessionId, 'expand-testing-register-success'));
         return {
-          summary: `Registered the practice account ${username} and verified the login-ready success state.`,
+          summary: 'Registered a fresh practice account and verified the login-ready success state.',
           details: {
-            username,
             ...verification.data,
           },
         };

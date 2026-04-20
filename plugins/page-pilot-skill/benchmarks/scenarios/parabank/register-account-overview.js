@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -21,6 +21,7 @@ function registrationActions(username) {
     { type: 'fill', locator: { strategy: 'css', value: '#customer\\.password' }, value: 'secret123' },
     { type: 'fill', locator: { strategy: 'css', value: '#repeatedPassword' }, value: 'secret123' },
     { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Register' } } },
+    { type: 'assert_text', locator: { strategy: 'css', value: '#leftPanel' }, value: 'Open New Account' },
   ];
 }
 
@@ -41,13 +42,17 @@ const verifyRegistrationScript = `
 
 export const scenario = {
   async run(context) {
-    const username = `bench${Date.now()}`;
     const sessionRun = await withScenarioSession(
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the ParaBank registration page', 'brief');
-        await runActions(context, sessionId, 'Register a new ParaBank demo customer', registrationActions(username));
-        const verification = await executeScript(
+        await validatePlaywright(
+          context,
+          sessionId,
+          'Register a new ParaBank demo customer',
+          registrationActions('{{pagePilot.uniqueUsername:parabank-register}}')
+        );
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the post-registration account overview links',
@@ -59,9 +64,8 @@ export const scenario = {
         );
         addArtifact(await captureScreenshot(context, sessionId, 'parabank-register-success'));
         return {
-          summary: `Registered ParaBank demo customer ${username} and verified the account services menu.`,
+          summary: 'Registered a ParaBank demo customer and verified the account services menu.',
           details: {
-            username,
             ...verification.data,
           },
         };

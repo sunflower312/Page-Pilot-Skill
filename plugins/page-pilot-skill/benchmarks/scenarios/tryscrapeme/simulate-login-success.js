@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -28,7 +28,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the simulated login page', 'brief');
-        await runActions(context, sessionId, 'Submit the simulated login credentials', [
+        await validatePlaywright(context, sessionId, 'Submit the simulated login credentials', [
           { type: 'fill', locator: { strategy: 'css', value: 'input[name="username"]' }, value: 'admin' },
           {
             type: 'fill',
@@ -37,7 +37,7 @@ export const scenario = {
           },
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Login' } } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify that the protected table is visible',

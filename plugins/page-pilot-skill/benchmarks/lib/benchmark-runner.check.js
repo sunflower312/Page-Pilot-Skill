@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-import { listBenchmarks, runBenchmarks } from './benchmark-runner.js';
+import { benchmarkRunSucceeded, listBenchmarks, runBenchmarks } from './benchmark-runner.js';
 import { BETA_BENCHMARK_REQUIREMENTS, buildCoverageMatrix } from './coverage-matrix.js';
+import { resolveScenarioSourcePath } from './scenario-helpers.js';
 import { siteRegistry } from '../registry/sites.js';
 
 const pluginRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -19,7 +21,16 @@ function createFakeClient(log, options = {}) {
       log.push('connect');
     },
     async listTools() {
-      return ['browser_close', 'browser_execute_js', 'browser_open', 'browser_run_actions', 'browser_scan'];
+      return [
+        'browser_close',
+        'browser_generate_playwright',
+        'browser_open',
+        'browser_probe',
+        'browser_rank_locators',
+        'browser_repair_playwright',
+        'browser_scan',
+        'browser_validate_playwright',
+      ];
     },
     async callTool(name, args) {
       log.push({ name, args });
@@ -216,6 +227,244 @@ test('runBenchmarks skips missing modules without crashing when no client was cr
   assert.equal(run.results[0].reason.code, 'SCENARIO_MODULE_MISSING');
   assert.equal(run.acceptance.ok, false);
   assert.equal(run.acceptance.code, 'NO_SCENARIOS_EXECUTED');
+});
+
+test('runBenchmarks excludes unavailable external sites from acceptance and coverage denominators', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-unavailable-'));
+  const calls = [];
+  const run = await runBenchmarks({
+    registry: [
+      {
+        id: 'up-site',
+        name: 'Up Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/up',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/up'], notes: [] },
+        scenarios: [
+          {
+            id: 'up-scenario',
+            title: 'Up scenario',
+            status: 'qualified',
+            module: './demo/up.js',
+            tags: ['smoke'],
+            guide: { steps: ['Open page'], expectedResult: 'Passes.', failureModes: ['None.'] },
+            metadata: { codeQualityEligible: true },
+          },
+        ],
+      },
+      {
+        id: 'down-site',
+        name: 'Down Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/down',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/down'], notes: [] },
+        scenarios: [
+          {
+            id: 'down-scenario',
+            title: 'Down scenario',
+            status: 'qualified',
+            module: './demo/down.js',
+            tags: ['smoke'],
+            guide: { steps: ['Open page'], expectedResult: 'Skipped when site is unavailable.', failureModes: ['External site down.'] },
+            metadata: { codeQualityEligible: true },
+          },
+        ],
+      },
+    ],
+    outputDir,
+    clientFactory: async () => ({
+      async connect() {
+        calls.push('connect');
+      },
+      async listTools() {
+        return ['browser_open', 'browser_close'];
+      },
+      async openSession(options) {
+        calls.push({ name: 'browser_open', args: options });
+        if (String(options.url).includes('/down')) {
+          return { ok: true, sessionId: 'down-session', url: options.url, title: 'Application Error' };
+        }
+        return { ok: true, sessionId: 'up-session', url: options.url, title: 'Ready' };
+      },
+      async closeSession(sessionId) {
+        calls.push({ name: 'browser_close', args: { sessionId } });
+        return { ok: true };
+      },
+      async callTool(name, args) {
+        calls.push({ name, args });
+        return { ok: true };
+      },
+      async close() {
+        calls.push('close');
+      },
+    }),
+    moduleLoader: async (moduleId) => {
+      if (moduleId === './demo/up.js') {
+        return {
+          scenario: {
+            async run(context) {
+              await context.withSession({}, async () => {});
+              context.recordStep('Synthetic validation', 'passed', {
+                codeQuality: {
+                  semanticLocatorRatio: 1,
+                  cssFallbackRatio: 0,
+                  uniqueLocatorHitRate: 1,
+                  firstValidationPassed: true,
+                  generatedValidationPassed: true,
+                  repaired: false,
+                  codeLineCount: 5,
+                },
+              });
+              return { summary: 'up passed' };
+            },
+          },
+        };
+      }
+      if (moduleId === './demo/down.js') {
+        return {
+          scenario: {
+            async run(context) {
+              await context.withSession({}, async () => {});
+              return { summary: 'should not reach here' };
+            },
+          },
+        };
+      }
+      throw new Error(`Unexpected module request: ${moduleId}`);
+    },
+  });
+
+  assert.equal(run.summary.passed, 1);
+  assert.equal(run.summary.skipped, 1);
+  assert.equal(run.summary.externalUnavailableSkipped, 1);
+  assert.equal(run.acceptance.ok, true);
+  assert.equal(run.coverage.summary.externalUnavailableSkipped, 1);
+  assert.equal(run.coverage.codeQuality.scenarioCount, 1);
+});
+
+test('buildCoverageMatrix skips code-quality ratio gates when every eligible scenario is externally unavailable', () => {
+  const coverage = buildCoverageMatrix(
+    [
+      {
+        id: 'offline-site',
+        name: 'Offline Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/offline',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/offline'], notes: [] },
+        scenarios: [
+          {
+            id: 'offline-scenario',
+            title: 'Offline scenario',
+            status: 'qualified',
+            module: './demo/offline.js',
+            tags: ['smoke'],
+            guide: { steps: ['Open page'], expectedResult: 'Would pass if available.', failureModes: ['Site unavailable.'] },
+            metadata: { codeQualityEligible: true },
+          },
+        ],
+      },
+    ],
+    [
+      {
+        siteId: 'offline-site',
+        scenarioId: 'offline-scenario',
+        status: 'skipped',
+        reason: { code: 'EXTERNAL_SITE_UNAVAILABLE', message: 'Site unavailable.' },
+      },
+    ]
+  );
+
+  assert.equal(coverage.summary.codeQualityEligibleScenarioCount, 1);
+  assert.equal(coverage.summary.codeQualityExternalUnavailableSkipped, 1);
+  assert.equal(coverage.codeQuality.scenarioCount, 0);
+  assert.equal(
+    coverage.betaGate.failures.some((failure) => /semantic locator ratio|css fallback ratio|unique locator hit rate|first validation pass rate|generated validation pass rate/.test(failure)),
+    false,
+    coverage.betaGate.failures.join('; ')
+  );
+});
+
+test('runBenchmarks keeps tool-level internal error pages as failures unless a scenario explicitly reclassifies them', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'agent-browser-benchmarks-tool-unavailable-'));
+  const run = await runBenchmarks({
+    registry: [
+      {
+        id: 'tool-down-site',
+        name: 'Tool Down Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/tool-down',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/tool-down'], notes: [] },
+        scenarios: [
+          {
+            id: 'tool-down-scenario',
+            title: 'Tool down scenario',
+            status: 'qualified',
+            module: './demo/tool-down.js',
+            tags: ['smoke'],
+            guide: {
+              steps: ['Open session', 'Run validation'],
+              expectedResult: 'Fails because the scenario did not explicitly reclassify the tool failure.',
+              failureModes: ['Tool returned an internal error page response.'],
+            },
+          },
+        ],
+      },
+    ],
+    outputDir,
+    clientFactory: async () => ({
+      async connect() {},
+      async listTools() {
+        return ['browser_open', 'browser_close', 'browser_validate_playwright'];
+      },
+      async openSession(options) {
+        return { ok: true, sessionId: 'tool-down-session', url: options.url, title: 'Ready' };
+      },
+      async closeSession() {
+        return { ok: true };
+      },
+      async callTool(name) {
+        if (name === 'browser_validate_playwright') {
+          return {
+            ok: false,
+            source: {
+              finalUrl: 'https://example.test/tool-down/openaccount',
+              finalTitle: 'Tool Down | Open Account',
+            },
+            observation: {
+              newText: ['Error! An internal error has occurred and has been logged.'],
+            },
+            error: {
+              code: 'ACTION_STEP_FAILED',
+              message: 'Error! An internal error has occurred and has been logged.',
+            },
+          };
+        }
+        return { ok: true };
+      },
+      async close() {},
+    }),
+    moduleLoader: async () => ({
+      scenario: {
+        async run(context) {
+          await context.withSession({}, async (sessionId) => {
+            await context.callTool('browser_validate_playwright', { sessionId, steps: [] });
+          });
+          return { summary: 'should not reach here' };
+        },
+      },
+    }),
+  });
+
+  assert.equal(run.summary.failed, 1);
+  assert.equal(run.summary.externalUnavailableSkipped, 0);
+  assert.equal(run.acceptance.ok, false);
+  assert.equal(run.results[0].status, 'failed');
+  assert.equal(run.results[0].reason.code, 'BENCHMARK_TOOL_FAILED');
+  assert.equal(run.coverage.summary.externalUnavailableSkipped, 0);
 });
 
 test('runBenchmarks fails the scenario when browser_close reports an application-level failure', async () => {
@@ -422,7 +671,7 @@ test('real-site registry keeps strong scenario coverage and only excludes pendin
   }
 });
 
-test('real-site registry assigns stable benchmark capabilities to every qualified scenario', () => {
+test('real-site registry keeps qualified scenarios executable and documented', () => {
   const listed = listBenchmarks({ registry: siteRegistry });
 
   for (const site of listed) {
@@ -431,36 +680,91 @@ test('real-site registry assigns stable benchmark capabilities to every qualifie
         continue;
       }
 
-      assert.ok(
-        Array.isArray(scenario.metadata?.capabilities) && scenario.metadata.capabilities.length > 0,
-        `${site.id}:${scenario.id} should declare benchmark capabilities`
-      );
+      assert.ok(typeof scenario.executable?.command === 'string' && scenario.executable.command.length > 0);
+      assert.ok(Array.isArray(scenario.guide?.steps) && scenario.guide.steps.length > 0);
+      assert.ok(typeof scenario.guide?.expectedResult === 'string' && scenario.guide.expectedResult.length > 0);
     }
   }
 });
 
 test('real-site registry satisfies beta benchmark coverage requirements', () => {
-  const coverage = buildCoverageMatrix(siteRegistry);
+  const coverageBaseline = buildCoverageMatrix(siteRegistry, []);
+  assert.equal(coverageBaseline.summary.codeQualityEligibleScenarioCount, 22);
+  const isCodeQualityEligible = (site, scenario) => {
+    if (typeof scenario.metadata?.codeQualityEligible === 'boolean') {
+      return scenario.metadata.codeQualityEligible;
+    }
+
+    const sourcePath = resolveScenarioSourcePath(site, scenario);
+    if (!sourcePath) {
+      return false;
+    }
+
+    try {
+      return /\bvalidatePlaywright\s*\(/.test(readFileSync(sourcePath, 'utf8'));
+    } catch {
+      return false;
+    }
+  };
+  const fakeQualityResults = siteRegistry.flatMap((site) =>
+    site.scenarios
+      .filter((scenario) => site.status === 'qualified' && scenario.status === 'qualified')
+      .filter((scenario) => isCodeQualityEligible(site, scenario))
+      .map((scenario) => ({
+        siteId: site.id,
+        scenarioId: scenario.id,
+        metrics: {
+          codeQuality: {
+            locatorCount: 10,
+            semanticLocatorCount: 9,
+            cssFallbackCount: 1,
+            uniqueLocatorHitCount: 9,
+            semanticLocatorRatio: 0.9,
+            cssFallbackRatio: 0.1,
+            uniqueLocatorHitRate: 0.95,
+            firstValidationPassed: true,
+            generatedValidationPassed: true,
+            repaired: false,
+            codeLineCount: 24,
+          },
+        },
+      }))
+  );
+  const coverage = buildCoverageMatrix(siteRegistry, fakeQualityResults);
 
   assert.equal(coverage.summary.qualifiedSiteCount, BETA_BENCHMARK_REQUIREMENTS.qualifiedSiteCount);
   assert.ok(
     coverage.summary.qualifiedScenarioCount >= BETA_BENCHMARK_REQUIREMENTS.minimumQualifiedScenarioCount,
     `qualified scenario count should reach beta threshold ${BETA_BENCHMARK_REQUIREMENTS.minimumQualifiedScenarioCount}`
   );
+  assert.equal(coverage.summary.codeQualityEligibleScenarioCount, fakeQualityResults.length);
   assert.equal(coverage.betaGate.ok, true, coverage.betaGate.failures.join('; '));
+  assert.ok(coverage.codeQuality.semanticLocatorRatio >= BETA_BENCHMARK_REQUIREMENTS.codeQuality.minimumSemanticLocatorRatio);
+  assert.ok(coverage.codeQuality.cssFallbackRatio <= BETA_BENCHMARK_REQUIREMENTS.codeQuality.maximumCssFallbackRatio);
+});
 
-  for (const requirement of BETA_BENCHMARK_REQUIREMENTS.capabilityRequirements) {
-    const actual = coverage.capabilities.find((entry) => entry.id === requirement.id);
-    assert.ok(actual, `Missing capability ${requirement.id}`);
-    assert.ok(
-      actual.scenarioCount >= requirement.minimumScenarioCount,
-      `${requirement.id} should have at least ${requirement.minimumScenarioCount} scenarios`
-    );
-    assert.ok(
-      actual.siteCount >= requirement.minimumSiteCount,
-      `${requirement.id} should span at least ${requirement.minimumSiteCount} sites`
-    );
-  }
+test('benchmarkRunSucceeded requires both acceptance and beta gate success', () => {
+  assert.equal(
+    benchmarkRunSucceeded({
+      acceptance: { ok: true },
+      coverage: { betaGate: { ok: true } },
+    }),
+    true
+  );
+  assert.equal(
+    benchmarkRunSucceeded({
+      acceptance: { ok: true },
+      coverage: { betaGate: { ok: false } },
+    }),
+    false
+  );
+  assert.equal(
+    benchmarkRunSucceeded({
+      acceptance: { ok: false },
+      coverage: { betaGate: { ok: true } },
+    }),
+    false
+  );
 });
 
 test('runBenchmarks preserves the primary scenario failure when withSession cleanup fails first', async () => {
@@ -538,5 +842,5 @@ test('benchmark CLI exits non-zero when filters only match non-runnable registry
   );
 
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /Acceptance: failed \(NO_SCENARIOS_SELECTED\)/);
+  assert.match(result.stdout, /Acceptance: failed \(NO_SCENARIOS_AVAILABLE\)/);
 });

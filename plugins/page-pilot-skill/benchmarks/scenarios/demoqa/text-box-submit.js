@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -35,7 +35,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the DemoQA text-box page', 'brief');
-        await runActions(context, sessionId, 'Fill and submit the text-box form', [
+        await validatePlaywright(context, sessionId, 'Fill and submit the text-box form', [
           { type: 'fill', locator: { strategy: 'css', value: '#userName' }, value: 'Jane Benchmark' },
           {
             type: 'fill',
@@ -54,7 +54,7 @@ export const scenario = {
           },
           { type: 'click', locator: { strategy: 'css', value: '#submit' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the submitted text-box output',

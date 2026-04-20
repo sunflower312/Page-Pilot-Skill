@@ -138,6 +138,8 @@ function createFixtureData() {
           visible: true,
           highValue: true,
           domIndex: 10,
+          withinMain: true,
+          withinForm: true,
         },
         {
           role: 'textbox',
@@ -569,9 +571,9 @@ test('buildLocatorCandidates returns stable ordered candidates', () => {
 
   assert.deepEqual(
     candidates.map((candidate) => candidate.strategy),
-    ['testId', 'role', 'label', 'placeholder', 'text', 'css']
+    ['role', 'label', 'testId', 'placeholder', 'text', 'css']
   );
-  assert.equal(candidates[0].value, 'email-input');
+  assert.deepEqual(candidates[0].value, { role: 'textbox', name: 'Email', exact: true });
 });
 
 test('collectStructuredPageData normalizes v2 structure and detail budgets', async () => {
@@ -597,7 +599,7 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   assert.equal(brief.interactives.buttons.some((entry) => entry.testId === 'hidden-test-hook'), true);
   assert.equal(
     brief.interactives.buttons.find((entry) => entry.testId === 'primary-action').locators[0].strategy,
-    'testId'
+    'role'
   );
 
   assert.equal(standard.document.description, 'Complex structured scan fixture for v2.');
@@ -624,12 +626,59 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   );
   assert.deepEqual(full.hints.primaryAction.locator, {
     strategy: 'role',
-    value: { role: 'button', name: 'Send request' },
+    value: { role: 'button', name: 'Send request', exact: true },
   });
   assert.deepEqual(full.hints.possiblePrimaryForm, { name: 'support-form' });
   assert.equal(full.hints.possibleResultRegions.length, 2);
   assert.equal(full.hints.context.hasFrames, true);
   assert.equal(full.hints.context.hasShadowHosts, true);
+
+  const emailField = full.interactives.inputs.find((entry) => entry.css === '#email');
+  assert.equal(emailField.accessibleName, 'Email');
+  assert.equal(emailField.visibleText, 'Email');
+  assert.equal(emailField.description, '');
+  assert.deepEqual(emailField.state, {
+    disabled: false,
+    required: false,
+    readonly: false,
+    checked: null,
+    selected: null,
+    expanded: null,
+    pressed: null,
+    busy: null,
+    value: '',
+  });
+  assert.deepEqual(emailField.actionability, {
+    visible: true,
+    enabled: true,
+    actionable: true,
+    editable: true,
+    clickable: false,
+    focusable: true,
+  });
+  assert.deepEqual(emailField.localContext.form, { name: 'support-form' });
+  assert.equal(emailField.localContext.dialog, null);
+  assert.equal(emailField.geometry, null);
+  assert.equal(emailField.recommendedLocators[0].locator.strategy, 'role');
+  assert.equal(emailField.recommendedLocators[0].confidence, 'high');
+  assert.deepEqual(emailField.recommendedLocators[0].reasons, ['semantic_role_name', 'form_scope']);
+  assert.equal(emailField.recommendedLocators[emailField.recommendedLocators.length - 1].fallbackReason, 'css_fallback');
+  assert.deepEqual(emailField.stableFingerprint, {
+    role: 'textbox',
+    accessibleName: 'Email',
+    description: '',
+    testId: '',
+    context: {
+      withinDialog: false,
+      withinForm: true,
+      withinMain: true,
+    },
+  });
+  assert.deepEqual(emailField.confidence, {
+    level: 'high',
+    score: 0.91,
+    reasons: ['semantic_role', 'label', 'in_form_context'],
+  });
 });
 
 test('collectStructuredPageData prioritizes workflow actions over page chrome in standard scans', async () => {
@@ -669,6 +718,6 @@ test('collectStructuredPageData can pick a workflow link as primaryAction when b
   assert.equal(standard.hints.primaryAction?.label, 'Resume plan');
   assert.deepEqual(standard.hints.primaryAction?.locator, {
     strategy: 'role',
-    value: { role: 'link', name: 'Resume plan' },
+    value: { role: 'link', name: 'Resume plan', exact: true },
   });
 });

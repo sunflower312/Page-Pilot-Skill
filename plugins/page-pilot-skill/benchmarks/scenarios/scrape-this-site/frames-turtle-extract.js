@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -36,7 +36,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the frames sandbox', 'brief');
-        const extraction = await executeScript(
+        const extraction = await runProbe(
           context,
           sessionId,
           'Extract turtle headings from the iframe document',

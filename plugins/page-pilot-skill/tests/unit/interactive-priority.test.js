@@ -364,3 +364,32 @@ test('shared browser interactive runtime normalizes aria-disabled workflow contr
     structuredRuntime.compareInteractivePriority(structuredSave, enabledChromeButton)
   );
 });
+
+test('shared browser interactive runtime prioritizes account workflow links over chrome navigation links', async () => {
+  const priorityModule = await import('../../scripts/lib/interactive-priority.js');
+  const runtime = priorityModule.createInteractivePriorityRuntime({
+    config: priorityModule.INTERACTIVE_PRIORITY_CONFIG,
+  });
+  const accountWorkflowLink = {
+    group: 'links',
+    role: 'link',
+    name: 'Open New Account',
+    text: 'Open New Account',
+    visible: true,
+    disabled: false,
+    withinAside: true,
+  };
+  const chromeLink = {
+    group: 'links',
+    role: 'link',
+    name: 'About Us',
+    text: 'About Us',
+    visible: true,
+    disabled: false,
+    withinNav: true,
+  };
+
+  assert.equal(runtime.getInteractiveHighValue(accountWorkflowLink), true);
+  assert.equal(runtime.getInteractiveHighValue(chromeLink), false);
+  assert.equal(runtime.compareInteractivePriority(accountWorkflowLink, chromeLink) < 0, true);
+});

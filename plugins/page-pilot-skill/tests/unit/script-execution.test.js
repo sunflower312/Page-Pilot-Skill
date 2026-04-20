@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { executeScript, serializeForTransport } from '../../scripts/lib/script-execution.js';
+import { executeReadonlyScriptProbe, serializeForTransport } from '../../scripts/lib/script-execution.js';
+import { executeProbeTemplate, validateReadonlyProbe } from '../../scripts/lib/probe-templates.js';
 
 test('serializeForTransport downgrades circular and DOM-like values', () => {
   const element = {
@@ -21,7 +22,7 @@ test('serializeForTransport downgrades circular and DOM-like values', () => {
   assert.equal(serialized.self.$type, 'circular');
 });
 
-test('executeScript serializes non-plain return values inside page context', async () => {
+test('executeReadonlyScriptProbe serializes non-plain return values inside page context', async () => {
   const page = {
     async evaluate(fn, input) {
       globalThis.window = { location: { href: 'http://fixture.local/' } };
@@ -37,15 +38,15 @@ test('executeScript serializes non-plain return values inside page context', asy
     },
   };
 
-  const result = await executeScript(
-    page,
-    `
+  const result = await executeReadonlyScriptProbe(page, {
+    source: `
       const element = { nodeType: 1, nodeName: 'BUTTON', tagName: 'BUTTON', id: 'save', textContent: 'Save changes' };
       const payload = { element, ref: document, current: window };
       payload.self = payload;
       return payload;
-    `
-  );
+    `,
+    timeoutMs: 100,
+  });
 
   assert.equal(result.element.$type, 'element');
   assert.equal(result.ref.$type, 'document');
@@ -53,7 +54,7 @@ test('executeScript serializes non-plain return values inside page context', asy
   assert.equal(result.self.$type, 'circular');
 });
 
-test('executeScript marks navigation-driven execution context destruction so callers can recover', async () => {
+test('executeReadonlyScriptProbe marks navigation-driven execution context destruction', async () => {
   const page = {
     async evaluate() {
       throw new Error('page.evaluate: Execution context was destroyed, most likely because of a navigation');
@@ -61,79 +62,248 @@ test('executeScript marks navigation-driven execution context destruction so cal
   };
 
   await assert.rejects(
-    () => executeScript(page, 'window.location.assign("/next-page.html");'),
+    () =>
+      executeReadonlyScriptProbe(page, {
+        source: 'return document.title;',
+        timeoutMs: 100,
+      }),
     (error) => {
       assert.equal(error.code, 'SCRIPT_EXECUTION_CONTEXT_DESTROYED');
       assert.match(error.message, /execution context was destroyed/i);
-      assert.match(error.cause?.message ?? '', /most likely because of a navigation/i);
       return true;
     }
   );
 });
 
-test('executeScript does not mark script-thrown navigation-looking errors as navigation interruptions', async () => {
+test('executeReadonlyScriptProbe surfaces genuine probe failures', async () => {
   const page = {
     async evaluate() {
-      throw new Error('page.evaluate: Error: Execution context was destroyed, most likely because of a navigation');
+      throw new Error('Probe exploded');
     },
   };
 
   await assert.rejects(
-    () => executeScript(page, 'throw new Error("Execution context was destroyed, most likely because of a navigation");'),
+    () =>
+      executeReadonlyScriptProbe(page, {
+        source: 'throw new Error("Probe exploded");',
+        timeoutMs: 100,
+      }),
     (error) => {
       assert.equal(error.code, undefined);
-      assert.match(error.message, /Error: Execution context was destroyed, most likely because of a navigation/);
+      assert.equal(error.message, 'Probe exploded');
       return true;
     }
   );
 });
 
-test('executeScript does not mark frame detached errors as navigation interruptions', async () => {
+test('executeProbeTemplate returns a bounded document snapshot', async () => {
   const page = {
-    async evaluate() {
-      throw new Error('page.evaluate: Frame was detached');
+    async evaluate(fn, input) {
+      globalThis.window = { location: { href: 'http://fixture.local/path' } };
+      globalThis.location = globalThis.window.location;
+      globalThis.document = {
+        title: 'Fixture title',
+        body: { innerText: 'Hello from the fixture page' },
+      };
+      try {
+        return await fn(input);
+      } finally {
+        delete globalThis.window;
+        delete globalThis.location;
+        delete globalThis.document;
+      }
     },
   };
 
-  await assert.rejects(
-    () => executeScript(page, 'throw new Error("Frame was detached");'),
+  const result = await executeProbeTemplate(page, {
+    template: 'document_snapshot',
+    timeoutMs: 100,
+  });
+
+  assert.equal(result.title, 'Fixture title');
+  assert.equal(result.url, 'http://fixture.local/path');
+  assert.match(result.text, /fixture page/i);
+  assert.equal(typeof result.textLength, 'number');
+});
+
+test('executeProbeTemplate returns a bounded selector snapshot', async () => {
+  const nodes = [
+    {
+      tagName: 'BUTTON',
+      id: 'save',
+      innerText: 'Save',
+      value: '',
+      checked: false,
+      disabled: false,
+      getAttribute(name) {
+        return name === 'aria-label' ? 'Save changes' : null;
+      },
+      getBoundingClientRect() {
+        return { x: 10.2, y: 20.6, width: 120.4, height: 32.1 };
+      },
+    },
+  ];
+
+  const page = {
+    async evaluate(fn, input) {
+      globalThis.document = {
+        querySelectorAll(selector) {
+          return selector === 'button' ? nodes : [];
+        },
+      };
+      try {
+        return await fn(input);
+      } finally {
+        delete globalThis.document;
+      }
+    },
+  };
+
+  const result = await executeProbeTemplate(page, {
+    template: 'selector_snapshot',
+    selector: 'button',
+    includeGeometry: true,
+    timeoutMs: 100,
+  });
+
+  assert.equal(result.selector, 'button');
+  assert.equal(result.count, 1);
+  assert.equal(result.elements[0].id, 'save');
+  assert.equal(result.elements[0].text, 'Save');
+  assert.equal(result.elements[0].ariaLabel, 'Save changes');
+  assert.deepEqual(result.elements[0].geometry, { x: 10, y: 21, width: 120, height: 32 });
+});
+
+test('validateReadonlyProbe rejects title writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'document.title = "Changed"; return document.title;',
+      }),
     (error) => {
-      assert.equal(error.code, undefined);
-      assert.equal(error.message, 'page.evaluate: Frame was detached');
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'document_write');
       return true;
     }
   );
 });
 
-test('executeScript does not mark missing-context errors as navigation interruptions', async () => {
-  const page = {
-    async evaluate() {
-      throw new Error('page.evaluate: Cannot find context with specified id');
-    },
-  };
-
-  await assert.rejects(
-    () => executeScript(page, 'throw new Error("Cannot find context with specified id");'),
+test('validateReadonlyProbe rejects click invocation', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'document.querySelector("#save")?.click(); return true;',
+      }),
     (error) => {
-      assert.equal(error.code, undefined);
-      assert.equal(error.message, 'page.evaluate: Cannot find context with specified id');
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'dom_event');
       return true;
     }
   );
 });
 
-test('executeScript does not swallow genuine script failures', async () => {
-  const page = {
-    async evaluate() {
-      throw new Error('Script exploded');
-    },
-  };
-
-  await assert.rejects(
-    () => executeScript(page, 'throw new Error("Script exploded");'),
+test('validateReadonlyProbe rejects storage writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'localStorage.setItem("key", "value"); return true;',
+      }),
     (error) => {
-      assert.equal(error.code, undefined);
-      assert.equal(error.message, 'Script exploded');
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'storage_write');
+      return true;
+    }
+  );
+});
+
+test('validateReadonlyProbe rejects bracket-notation fetch writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'window[\"fetch\"](\"/api/demo\"); return true;',
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'network_side_effect');
+      return true;
+    }
+  );
+});
+
+test('validateReadonlyProbe rejects bracket-notation HTML writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'document.body[\"innerHTML\"] = \"changed\"; return true;',
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'html_write');
+      return true;
+    }
+  );
+});
+
+test('validateReadonlyProbe rejects obvious unbounded loops', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'while (true) {}',
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'potential_infinite_loop');
+      return true;
+    }
+  );
+});
+
+test('validateReadonlyProbe rejects optional-chaining fetch writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'globalThis.fetch?.("/api/demo"); return true;',
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'network_side_effect');
+      return true;
+    }
+  );
+});
+
+test('validateReadonlyProbe rejects optional-chaining history writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'history?.pushState({}, "", "/next"); return true;',
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'navigation_write');
+      return true;
+    }
+  );
+});
+
+test('validateReadonlyProbe rejects optional-chaining storage writes', () => {
+  assert.throws(
+    () =>
+      validateReadonlyProbe({
+        template: 'readonly_script',
+        source: 'sessionStorage?.setItem("k", "v"); return true;',
+      }),
+    (error) => {
+      assert.equal(error.code, 'PROBE_READONLY_VIOLATION');
+      assert.equal(error.details.reason, 'storage_write');
       return true;
     }
   );

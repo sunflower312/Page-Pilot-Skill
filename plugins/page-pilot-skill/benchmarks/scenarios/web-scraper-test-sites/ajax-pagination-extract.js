@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -30,7 +30,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the AJAX catalogue page', 'brief');
-        const extraction = await executeScript(
+        const extraction = await runProbe(
           context,
           sessionId,
           'Extract AJAX-loaded laptop cards',

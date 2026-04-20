@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -37,7 +37,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the complex form challenge', 'brief');
-        const extraction = await executeScript(
+        const extraction = await runProbe(
           context,
           sessionId,
           'Extract visible and hidden form data',

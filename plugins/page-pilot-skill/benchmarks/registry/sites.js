@@ -364,7 +364,9 @@ export const siteRegistry = [
             'The visible products do not change after the pagination action.',
             'The later-page catalogue renders empty cards or no cards at all.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'load-more-catalog-growth',
@@ -384,7 +386,9 @@ export const siteRegistry = [
             'The card count does not grow after clicking More.',
             'The catalogue loses cards instead of appending more items.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'scroll-growth-extract',
@@ -577,7 +581,9 @@ export const siteRegistry = [
             'The checkbox state does not change after the interaction.',
             'The second checkbox unexpectedly loses its checked state.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'dynamic-controls-state',
@@ -617,7 +623,9 @@ export const siteRegistry = [
             'Hello World never appears.',
             'The finish area renders incomplete text.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'entry-ad-close',
@@ -803,7 +811,9 @@ export const siteRegistry = [
             'The generate button inside the shadow root is missing.',
             'The generated value is empty or malformed.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'visibility-hide-status',
@@ -869,7 +879,9 @@ export const siteRegistry = [
             'The table rows do not change after pagination.',
             'Extracted rows are empty or malformed.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'login-success',
@@ -1133,7 +1145,9 @@ export const siteRegistry = [
             'The challenge stops advancing after a row submission.',
             'The success state never appears after the configured row set.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
     ],
   }),
@@ -1177,7 +1191,9 @@ export const siteRegistry = [
             'The selected result text is not updated.',
             'The No option is no longer disabled.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'text-box-submit',
@@ -1284,7 +1300,9 @@ export const siteRegistry = [
             'The registration flow no longer logs the user in.',
             'The account services menu is missing after registration.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'transfer-funds',
@@ -1304,7 +1322,9 @@ export const siteRegistry = [
             'Submitting the transfer never reaches the completion state.',
             'The completion view is missing the transferred amount or destination account.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'open-new-account',
@@ -1324,7 +1344,9 @@ export const siteRegistry = [
             'The open-account submit control is missing.',
             'The success state does not contain the Account Opened confirmation.',
           ],
-        }
+        },
+        'qualified',
+        { codeQualityEligible: false }
       ),
       scenario(
         'bill-pay',

@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -79,7 +79,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the dynamic controls page', 'brief');
-        const initial = await executeScript(
+        const initial = await runProbe(
           context,
           sessionId,
           'Record the initial dynamic-controls state',
@@ -91,10 +91,10 @@ export const scenario = {
             inputButton: data.inputButton,
           })
         );
-        await runActions(context, sessionId, 'Remove the checkbox control', [
+        await validatePlaywright(context, sessionId, 'Remove the checkbox control', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Remove' } } },
         ]);
-        const removed = await executeScript(
+        const removed = await runProbe(
           context,
           sessionId,
           'Wait for the removed-checkbox state',
@@ -113,10 +113,10 @@ export const scenario = {
             message: data.message,
           })
         );
-        await runActions(context, sessionId, 'Restore the checkbox control', [
+        await validatePlaywright(context, sessionId, 'Restore the checkbox control', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Add' } } },
         ]);
-        const restored = await executeScript(
+        const restored = await runProbe(
           context,
           sessionId,
           'Wait for the restored-checkbox state',
@@ -135,10 +135,10 @@ export const scenario = {
             message: data.message,
           })
         );
-        await runActions(context, sessionId, 'Enable the input field', [
+        await validatePlaywright(context, sessionId, 'Enable the input field', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Enable' } } },
         ]);
-        const enabled = await executeScript(
+        const enabled = await runProbe(
           context,
           sessionId,
           'Wait for the enabled-input state',
@@ -157,14 +157,14 @@ export const scenario = {
             message: data.message,
           })
         );
-        await runActions(context, sessionId, 'Fill the enabled input field', [
+        await validatePlaywright(context, sessionId, 'Fill the enabled input field', [
           {
             type: 'fill',
             locator: { strategy: 'css', value: '#input-example input[type="text"]' },
             value: 'Benchmark ready',
           },
         ]);
-        const filled = await executeScript(
+        const filled = await runProbe(
           context,
           sessionId,
           'Verify the enabled input value',

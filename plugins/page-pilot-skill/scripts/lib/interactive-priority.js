@@ -2,6 +2,8 @@ export const INTERACTIVE_PRIORITY_CONFIG = Object.freeze({
   patterns: Object.freeze({
     forwardAction: String.raw`\b(?:start|resume|next|continue|save|confirm|submit|send|search|finish|complete|done)\b`,
     secondaryAction: String.raw`\b(?:cancel|skip|close|dismiss|back|later)\b`,
+    accountWorkflowLink:
+      String.raw`\b(?:open new account|accounts overview|transfer funds|bill pay|find transactions|update contact info|request loan|account services)\b`,
     chromeHint:
       String.raw`\b(?:read more|learn more|documentation|docs|blog|events|privacy|terms|cookie|support|help|contact|careers|community|pricing|products|solutions|partners|language|theme|overview)\b`,
   }),
@@ -16,6 +18,7 @@ export const INTERACTIVE_PRIORITY_CONFIG = Object.freeze({
     forwardWorkflowAction: 24,
     secondaryWorkflowAction: 4,
     forwardWorkflowLink: 8,
+    accountWorkflowLink: 22,
     withinHeader: -16,
     withinFooter: -14,
     withinNav: -12,
@@ -45,6 +48,7 @@ export function createInteractivePriorityRuntime({ config } = {}) {
   const patterns = {
     forwardAction: new RegExp(resolvedConfig.patterns?.forwardAction ?? '', 'i'),
     secondaryAction: new RegExp(resolvedConfig.patterns?.secondaryAction ?? '', 'i'),
+    accountWorkflowLink: new RegExp(resolvedConfig.patterns?.accountWorkflowLink ?? '', 'i'),
     chromeHint: new RegExp(resolvedConfig.patterns?.chromeHint ?? '', 'i'),
   };
   const scores = resolvedConfig.scores ?? {};
@@ -127,7 +131,8 @@ export function createInteractivePriorityRuntime({ config } = {}) {
   }
 
   function hasForwardWorkflowActionText(entry = {}) {
-    return getWorkflowActionKind(entry) === 'forward';
+    const normalized = normalizeInteractiveEntry(entry);
+    return getWorkflowActionKind(normalized) === 'forward' || patterns.accountWorkflowLink.test(getInteractiveLabel(normalized));
   }
 
   function hasSecondaryWorkflowActionText(entry = {}) {
@@ -156,7 +161,8 @@ export function createInteractivePriorityRuntime({ config } = {}) {
         normalized.isSubmitControl === true ||
         normalized.withinForm === true ||
         normalized.withinDialog === true ||
-        hasWorkflowActionText(normalized)
+        hasWorkflowActionText(normalized) ||
+        patterns.accountWorkflowLink.test(getInteractiveLabel(normalized))
       );
     }
 
@@ -203,6 +209,9 @@ export function createInteractivePriorityRuntime({ config } = {}) {
     }
     if (entry.group === 'links' && hasForwardWorkflowActionText(entry)) {
       score += scores.forwardWorkflowLink ?? 0;
+    }
+    if (entry.group === 'links' && patterns.accountWorkflowLink.test(getInteractiveLabel(entry))) {
+      score += scores.accountWorkflowLink ?? 0;
     }
     if (entry.withinHeader) {
       score += scores.withinHeader ?? 0;

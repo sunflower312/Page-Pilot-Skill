@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -32,7 +32,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the infinite-scroll catalogue page', 'brief');
-        const measurement = await executeScript(
+        const measurement = await runProbe(
           context,
           sessionId,
           'Scroll the page and verify product growth',

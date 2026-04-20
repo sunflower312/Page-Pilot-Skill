@@ -101,6 +101,7 @@ export class BrowserManager {
         lastTouchedAt: now,
         expiresAt: now + this.idleMs,
         activeOperations: 0,
+        validationHistory: [],
         strategyMemory: null,
         lastActionFailure: null,
         lastWorkflowSummary: null,

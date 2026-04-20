@@ -127,10 +127,18 @@ async function renderMarkdown(run) {
       `- ${site.id}: qualified=${site.qualifiedScenarioCount}, pending=${site.pendingScenarioCount}, excluded=${site.excludedScenarioCount}`
     );
   }
-  lines.push('', '### Capability Matrix', '');
-  for (const capability of run.coverage.capabilities) {
-    lines.push(`- ${capability.id}: scenarios=${capability.scenarioCount}, sites=${capability.siteCount}`);
-  }
+  lines.push('', '### Code Quality Gate', '');
+  lines.push(`- Scenarios with code quality data: ${run.coverage.codeQuality.scenarioCount}`);
+  lines.push(`- Semantic locator ratio: ${run.coverage.codeQuality.semanticLocatorRatio}`);
+  lines.push(`- CSS fallback ratio: ${run.coverage.codeQuality.cssFallbackRatio}`);
+  lines.push(`- Unique locator hit rate: ${run.coverage.codeQuality.uniqueLocatorHitRate}`);
+  lines.push(`- First validation pass rate: ${run.coverage.codeQuality.firstValidationPassRate}`);
+  lines.push(`- Generated validation pass rate: ${run.coverage.codeQuality.generatedValidationPassRate}`);
+  lines.push(`- Repair attempts: ${run.coverage.codeQuality.repairAttemptCount}`);
+  lines.push(
+    `- Repair pass rate: ${run.coverage.codeQuality.repairPassRate === null ? 'n/a' : run.coverage.codeQuality.repairPassRate}`
+  );
+  lines.push(`- Average generated code lines: ${run.coverage.codeQuality.averageCodeLineCount}`);
   lines.push('');
 
   for (const site of run.catalog.sites) {
@@ -158,7 +166,7 @@ async function renderMarkdown(run) {
       renderList(lines, [scenario.guide?.expectedResult ?? '']);
       lines.push('- Failure Modes');
       renderList(lines, scenario.guide?.failureModes ?? []);
-      lines.push('- Executable Test Code');
+      lines.push('- Benchmark Harness Source');
       lines.push(`- Command: \`${formatExecutionCommand({ siteId: site.id, scenarioId: scenario.id, executable: scenario.executable })}\``);
       lines.push(`- Module: \`${scenario.executable?.moduleId ?? scenario.module ?? 'not-implemented'}\``);
       lines.push(`- Source Path: \`${scenario.executable?.sourcePath ?? 'not-available'}\``);
@@ -177,6 +185,14 @@ async function renderMarkdown(run) {
     lines.push(`- Reason: ${renderReason(result) || 'none'}`);
     lines.push(`- Tool calls: ${result.metrics.toolCalls}`);
     lines.push(`- Sessions opened: ${result.metrics.sessionsOpened}`);
+    if (result.metrics.codeQuality) {
+      lines.push(`- Semantic locator ratio: ${result.metrics.codeQuality.semanticLocatorRatio}`);
+      lines.push(`- CSS fallback ratio: ${result.metrics.codeQuality.cssFallbackRatio}`);
+      lines.push(`- Unique locator hit rate: ${result.metrics.codeQuality.uniqueLocatorHitRate}`);
+      lines.push(`- First validation passed: ${result.metrics.codeQuality.firstValidationPassed ? 'yes' : 'no'}`);
+      lines.push(`- Repaired: ${result.metrics.codeQuality.repaired ? 'yes' : 'no'}`);
+      lines.push(`- Generated code lines: ${result.metrics.codeQuality.codeLineCount}`);
+    }
     lines.push('');
     lines.push('#### Runtime Steps');
     lines.push('');
@@ -207,7 +223,7 @@ async function renderMarkdown(run) {
       lines.push('```');
       lines.push('');
     }
-    lines.push('#### Executable Test Code');
+    lines.push('#### Benchmark Harness Source');
     lines.push('');
     lines.push('```bash');
     lines.push(formatExecutionCommand(result));
@@ -216,6 +232,18 @@ async function renderMarkdown(run) {
     lines.push(`- Module: \`${result.executable?.moduleId ?? result.module ?? 'not-implemented'}\``);
     lines.push(`- Source Path: \`${result.executable?.sourcePath ?? 'not-available'}\``);
     lines.push('');
+    const generatedCode = result.steps
+      .map((step) => step.details?.generatedCode ?? null)
+      .filter(Boolean)
+      .at(-1);
+    if (generatedCode) {
+      lines.push('#### Generated Playwright');
+      lines.push('');
+      lines.push('```ts');
+      lines.push(generatedCode.trimEnd());
+      lines.push('```');
+      lines.push('');
+    }
     const source = await readScenarioCode(result.executable?.moduleId ?? result.module);
     if (source) {
       lines.push('```js');

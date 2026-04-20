@@ -6,6 +6,7 @@ import {
   compareInteractivePriority,
   shouldKeepInteractive,
 } from './interactive-priority.js';
+import { rankLocatorCandidates, unwrapRankedLocator } from './locator-ranking.js';
 import { selectActiveDialog, selectPrimaryAction } from './semantic-model.js';
 
 const DETAIL_SETTINGS = {
@@ -128,21 +129,191 @@ function regroupInteractives(entries = []) {
   return groups;
 }
 
-function enrichEntry(entry = {}) {
-  const locators = buildLocatorCandidates(entry);
+function normalizeNullableBoolean(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return null;
+}
+
+function normalizeGeometry(geometry = null) {
+  if (!geometry || typeof geometry !== 'object') {
+    return null;
+  }
+
+  const x = Number(geometry.x);
+  const y = Number(geometry.y);
+  const width = Number(geometry.width);
+  const height = Number(geometry.height);
+
+  if (![x, y, width, height].every(Number.isFinite)) {
+    return null;
+  }
+
+  const viewportVisibleRatio = Number(geometry.viewportVisibleRatio);
+
   return {
-    ...entry,
-    locators,
-    preferredLocator: locators[0] ?? null,
-    fallbackLocators: locators.slice(1),
+    x,
+    y,
+    width,
+    height,
+    viewportVisibleRatio: Number.isFinite(viewportVisibleRatio) ? viewportVisibleRatio : null,
   };
 }
 
-function enrichInteractives(interactives = {}) {
+function inferEntryState(entry = {}) {
+  return {
+    disabled: entry.disabled === true,
+    required: entry.required === true,
+    readonly: entry.readonly === true,
+    checked: typeof entry.checked === 'boolean' ? entry.checked : null,
+    selected: typeof entry.selected === 'boolean' ? entry.selected : null,
+    expanded: normalizeNullableBoolean(entry.expanded),
+    pressed: normalizeNullableBoolean(entry.pressed),
+    busy: normalizeNullableBoolean(entry.busy),
+    value: typeof entry.value === 'string' ? entry.value : '',
+  };
+}
+
+function inferEntryActionability(entry = {}) {
+  const visible = entry.visible !== false;
+  const enabled = entry.disabled !== true;
+  const actionable = visible && enabled;
+  const editable = actionable && ['inputs', 'textareas', 'selects'].includes(entry.group);
+  const clickable = actionable && ['buttons', 'links', 'checkboxes'].includes(entry.group);
+  const focusable = visible && entry.focusable !== false;
+
+  return { visible, enabled, actionable, editable, clickable, focusable };
+}
+
+function inferEntryLocalContext(entry = {}, raw = {}) {
+  const entryContext = entry.localContext ?? {};
+  const activeDialog = selectActiveDialog(raw.dialogs ?? []);
+  const formFallback = entry.withinForm ? raw.landmarks?.forms?.[0] ?? null : null;
+  const dialogFallback =
+    entry.withinDialog && activeDialog
+      ? { name: activeDialog.name || activeDialog.label || '', css: activeDialog.css || '' }
+      : entry.withinDialog
+        ? raw.landmarks?.dialogs?.[0] ?? null
+        : null;
+  const headingFallback = raw.headings?.[0]
+    ? { text: raw.headings[0].text, level: raw.headings[0].level ?? null, css: raw.headings[0].css || '' }
+    : null;
+
+  return {
+    form: entryContext.form ?? formFallback,
+    dialog: entryContext.dialog ?? dialogFallback,
+    table: entryContext.table ?? null,
+    list: entryContext.list ?? null,
+    heading: entryContext.heading ?? headingFallback,
+    section: entryContext.section ?? null,
+    landmark: entryContext.landmark ?? null,
+  };
+}
+
+function inferStableFingerprint(entry = {}, accessibleName = '') {
+  return {
+    role: entry.role || '',
+    accessibleName,
+    description: entry.description || '',
+    testId: entry.testId || entry.attributes?.testId || '',
+    context: {
+      withinDialog: entry.withinDialog === true,
+      withinForm: entry.withinForm === true,
+      withinMain: entry.withinMain === true,
+    },
+  };
+}
+
+function inferConfidence(entry = {}, locators = [], actionability = { actionable: false }) {
+  const reasons = [];
+  let score = actionability.actionable ? 0.24 : 0.12;
+
+  if (entry.role && (entry.name || entry.accessibleName)) {
+    score += 0.36;
+    reasons.push('semantic_role');
+  }
+
+  if (entry.label) {
+    score += 0.2;
+    reasons.push('label');
+  } else if (entry.placeholder) {
+    score += 0.1;
+    reasons.push('placeholder');
+  }
+
+  if (entry.testId) {
+    score += 0.18;
+    reasons.push('test_id');
+  }
+
+  if (entry.withinDialog) {
+    score += 0.11;
+    reasons.push('in_dialog_context');
+  } else if (entry.withinForm) {
+    score += 0.11;
+    reasons.push('in_form_context');
+  }
+
+  if (locators.length === 1 && locators[0]?.strategy === 'css') {
+    score = Math.min(score, 0.34);
+  }
+
+  const roundedScore = Number(Math.min(score, 0.99).toFixed(2));
+  return {
+    level: roundedScore >= 0.8 ? 'high' : roundedScore >= 0.55 ? 'medium' : 'low',
+    score: roundedScore,
+    reasons,
+  };
+}
+
+function enrichEntry(entry = {}, raw = {}) {
+  const locators = buildLocatorCandidates(entry);
+  const recommendedLocators = rankLocatorCandidates(entry);
+  const accessibleName = compactText(entry.accessibleName || entry.name || entry.label || '');
+  const visibleText = compactText(entry.visibleText || entry.text || entry.label || '');
+  const description = compactText(entry.description || '');
+  const state = inferEntryState(entry);
+  const actionability = inferEntryActionability(entry);
+  const localContext = inferEntryLocalContext(entry, raw);
+  const geometry = normalizeGeometry(entry.geometry);
+  const stableFingerprint = inferStableFingerprint(entry, accessibleName);
+  const confidence = inferConfidence({ ...entry, accessibleName }, locators, actionability);
+
+  return {
+    ...entry,
+    accessibleName,
+    visibleText,
+    description,
+    attributes: {
+      label: entry.label || '',
+      placeholder: entry.placeholder || '',
+      testId: entry.testId || '',
+    },
+    state,
+    actionability,
+    localContext,
+    geometry,
+    recommendedLocators,
+    stableFingerprint,
+    confidence,
+    locators,
+    preferredLocator: unwrapRankedLocator(recommendedLocators[0]) ?? locators[0] ?? null,
+    fallbackLocators: recommendedLocators.slice(1).map((candidate) => unwrapRankedLocator(candidate)).filter(Boolean),
+  };
+}
+
+function enrichInteractives(interactives = {}, raw = {}) {
   const enriched = {};
 
   for (const [groupName, entries] of Object.entries(interactives)) {
-    enriched[groupName] = (entries ?? []).map((entry) => enrichEntry(entry));
+    enriched[groupName] = (entries ?? []).map((entry) => enrichEntry(entry, raw));
   }
 
   return enriched;
@@ -153,36 +324,61 @@ function pickByLimit(entries = [], limit) {
 }
 
 function buildDocument(raw, detailLevel, settings) {
+  const dialogs = pickByLimit(raw.dialogs ?? raw.landmarks?.dialogs ?? [], settings.maxDialogs);
+  const frames = pickByLimit(raw.frames ?? [], settings.maxFrames);
+  const shadowHosts = pickByLimit(raw.shadowHosts ?? [], settings.maxShadowHosts);
+  const mains = raw.landmarks?.mains ?? [];
+  const forms = pickByLimit(raw.landmarks?.forms ?? [], settings.maxFormFields);
+  const tables = pickByLimit(raw.tables ?? [], settings.maxLists);
+  const lists = pickByLimit(raw.lists ?? [], settings.maxLists);
+  const headings = pickByLimit(raw.headings ?? [], settings.maxHeadings);
+
   return {
     title: raw.title,
     url: raw.url,
     lang: raw.lang || undefined,
+    readyState: raw.readyState || 'complete',
     description: detailLevel === 'brief' ? undefined : raw.description || undefined,
-    dialogs: pickByLimit(raw.dialogs ?? raw.landmarks?.dialogs ?? [], settings.maxDialogs),
-    frames: pickByLimit(raw.frames ?? [], settings.maxFrames),
-    shadowHosts: pickByLimit(raw.shadowHosts ?? [], settings.maxShadowHosts),
-    mains: raw.landmarks?.mains ?? [],
+    dialogs,
+    frames,
+    shadowHosts,
+    mains,
+    regions: {
+      main: mains,
+      dialogs,
+      forms,
+      tables,
+      lists,
+      headings,
+      frames,
+      shadowRoots: shadowHosts,
+    },
     detailLevel,
   };
 }
 
 function buildHints(raw, filteredEntries, detailLevel, settings) {
-  const toHintLocator = (entry) => {
-    const locator = entry.preferredLocator ?? buildLocatorCandidates(entry)[0];
+  const toLocatorReference = (candidate) => {
+    const locator = unwrapRankedLocator(candidate);
     return locator ? { strategy: locator.strategy, value: locator.value } : null;
   };
+  const toHintLocator = (entry) => {
+    return toLocatorReference(entry.preferredLocator ?? entry.recommendedLocators?.[0] ?? buildLocatorCandidates(entry)[0]);
+  };
   const toHintLocators = (entry) =>
-    (entry.locators ?? buildLocatorCandidates(entry)).map((locator) => ({ strategy: locator.strategy, value: locator.value }));
+    (entry.recommendedLocators ?? entry.locators ?? buildLocatorCandidates(entry))
+      .map((candidate) => toLocatorReference(candidate))
+      .filter(Boolean);
 
   const formFields = filteredEntries
     .filter((entry) => ['inputs', 'selects', 'textareas', 'checkboxes'].includes(entry.group))
     .slice(0, settings.maxFormFields)
     .map((entry) => ({
-      label: entry.label || entry.name || entry.text || '',
+      label: entry.accessibleName || entry.visibleText || entry.label || entry.name || entry.text || '',
       kind: entry.group,
-      value: entry.value ?? '',
-      checked: entry.checked ?? false,
-      required: entry.required ?? false,
+      value: entry.state?.value ?? entry.value ?? '',
+      checked: entry.state?.checked ?? entry.checked ?? false,
+      required: entry.state?.required ?? entry.required ?? false,
       locator: toHintLocator(entry),
       locators: toHintLocators(entry),
     }));
@@ -204,7 +400,7 @@ function buildHints(raw, filteredEntries, detailLevel, settings) {
     formFields,
     primaryAction: primaryAction
       ? {
-          label: primaryAction.name || primaryAction.text || '',
+          label: primaryAction.accessibleName || primaryAction.visibleText || primaryAction.name || primaryAction.text || '',
           locator: toHintLocator(primaryAction),
           locators: toHintLocators(primaryAction),
         }
@@ -225,8 +421,8 @@ function normalizeRawScan(raw, detailLevel) {
   const retainedEntries = discoveredEntries.filter(shouldKeepInteractive).sort(compareInteractivePriority);
   const budgetedEntries = pickByLimit(retainedEntries, settings.maxInteractives);
   const regrouped = regroupInteractives(budgetedEntries);
-  const enrichedInteractives = enrichInteractives(regrouped);
-  const enrichedRetainedEntries = retainedEntries.map((entry) => enrichEntry(entry));
+  const enrichedInteractives = enrichInteractives(regrouped, raw);
+  const enrichedRetainedEntries = retainedEntries.map((entry) => enrichEntry(entry, raw));
 
   return {
     ok: true,
@@ -280,23 +476,118 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
         );
       };
       const getLabel = (element) => {
+        const readLabelText = (node) => compactTextInner(node?.innerText || node?.textContent || '');
+        const readLabeledByText = (ids) =>
+          compactTextInner(
+            String(ids || '')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((id) => readLabelText(document.getElementById(id)))
+              .filter(Boolean)
+              .join(' ')
+          );
+        const readTableRowLabel = (control) => {
+          const row = control.closest?.('tr');
+          if (!row) {
+            return '';
+          }
+
+          const cells = Array.from(row.children).filter((cell) => /^(td|th)$/i.test(cell.tagName));
+          const ownerCell = control.closest?.('td,th');
+          const ownerIndex = ownerCell ? cells.indexOf(ownerCell) : -1;
+          if (ownerIndex <= 0) {
+            return '';
+          }
+
+          for (let index = ownerIndex - 1; index >= 0; index -= 1) {
+            const text = readLabelText(cells[index]);
+            if (text) {
+              return text;
+            }
+          }
+
+          return '';
+        };
+        const readNearbyLabel = (control) => {
+          const siblings = [control.previousElementSibling].filter(Boolean);
+          for (const sibling of siblings) {
+            const text = readLabelText(sibling);
+            if (text) {
+              return text;
+            }
+          }
+          return '';
+        };
+
         if (element.labels?.length) {
-          return compactTextInner(element.labels[0].innerText);
+          return readLabelText(element.labels[0]);
         }
         if (element.id) {
-          return compactTextInner(document.querySelector(`label[for="${element.id}"]`)?.innerText ?? '');
+          const explicit = readLabelText(document.querySelector(`label[for="${element.id}"]`));
+          if (explicit) {
+            return explicit;
+          }
         }
-        return '';
+        const wrapped = readLabelText(element.closest?.('label'));
+        if (wrapped) {
+          return wrapped;
+        }
+        const labelledBy = readLabeledByText(element.getAttribute('aria-labelledby'));
+        if (labelledBy) {
+          return labelledBy;
+        }
+        const tableRowLabel = readTableRowLabel(element);
+        if (tableRowLabel) {
+          return tableRowLabel;
+        }
+        return readNearbyLabel(element);
       };
+      const getElementText = (element) =>
+        compactTextInner(
+          element.innerText ||
+            element.textContent ||
+            (element.tagName === 'INPUT' && ['button', 'submit', 'reset'].includes((element.getAttribute('type') || '').toLowerCase())
+              ? element.value
+              : '') ||
+            ''
+        );
       const getName = (element) =>
         compactTextInner(
           element.getAttribute('aria-label') ||
-            element.innerText ||
-            element.textContent ||
+            getElementText(element) ||
             getLabel(element) ||
             element.getAttribute('placeholder') ||
             ''
         );
+      const getDescription = (element) => {
+        const describedBy = compactTextInner(element.getAttribute('aria-describedby') || '');
+        const describedByText = describedBy
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((id) => compactTextInner(document.getElementById(id)?.innerText || document.getElementById(id)?.textContent || ''))
+          .filter(Boolean)
+          .join(' ');
+
+        return compactTextInner(element.getAttribute('aria-description') || describedByText || element.getAttribute('title') || '');
+      };
+      const getGeometry = (element) => {
+        const rect = element.getBoundingClientRect();
+        if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) {
+          return null;
+        }
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          viewportVisibleRatio: Number(
+            Math.max(
+              0,
+              Math.min(1, (Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0)) / Math.max(rect.height, 1))
+            ).toFixed(2)
+          ),
+        };
+      };
       const escapeCssIdentifier = (value) => {
         const source = String(value ?? '');
         if (globalThis.CSS?.escape) {
@@ -326,6 +617,7 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
       };
       const hasClosestMatch = (element, owner, selector) =>
         Boolean(element.closest?.(selector)) || Boolean(owner !== element && owner?.closest?.(selector));
+      const getClosestContextElement = (element, owner, selector) => owner?.closest?.(selector) || element.closest?.(selector) || null;
       const getContextFlags = (element, owner = element) => ({
         withinMain: hasClosestMatch(element, owner, 'main,[role="main"]'),
         withinForm: hasClosestMatch(element, owner, 'form'),
@@ -335,6 +627,58 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
         withinNav: hasClosestMatch(element, owner, 'nav,[role="navigation"]'),
         withinAside: hasClosestMatch(element, owner, 'aside,[role="complementary"]'),
       });
+      const getHeadingContext = (element, owner = element) => {
+        const scope =
+          getClosestContextElement(element, owner, 'section,article,form,dialog,[role="dialog"],main,[role="main"]') ?? document.body;
+        const heading = scope?.querySelector?.('h1,h2,h3,h4,h5,h6,[role="heading"]');
+        if (!heading) {
+          return null;
+        }
+        return {
+          text: compactTextInner(heading.innerText || heading.textContent || ''),
+          level: /^h[1-6]$/i.test(heading.tagName) ? Number(heading.tagName.slice(1)) : null,
+          css: getCss(heading),
+        };
+      };
+      const buildContextSummary = (contextElement) => {
+        if (!contextElement) {
+          return null;
+        }
+        return {
+          name:
+            compactTextInner(
+              contextElement.getAttribute?.('aria-label') ||
+                contextElement.getAttribute?.('name') ||
+                contextElement.getAttribute?.('id') ||
+                contextElement.innerText ||
+                contextElement.textContent ||
+                ''
+            ) || '',
+          css: getCss(contextElement),
+        };
+      };
+      const getLocalContext = (element, owner = element) => {
+        const form = getClosestContextElement(element, owner, 'form');
+        const dialog = getClosestContextElement(element, owner, 'dialog,[role="dialog"]');
+        const table = getClosestContextElement(element, owner, 'table,[role="table"],[role="grid"]');
+        const list = getClosestContextElement(element, owner, 'ul,ol,[role="list"]');
+        const section = getClosestContextElement(element, owner, 'section,article');
+        const landmark = getClosestContextElement(
+          element,
+          owner,
+          'main,[role="main"],nav,[role="navigation"],aside,[role="complementary"],header,[role="banner"],footer,[role="contentinfo"]'
+        );
+
+        return {
+          form: buildContextSummary(form),
+          dialog: buildContextSummary(dialog),
+          table: buildContextSummary(table),
+          list: buildContextSummary(list),
+          heading: getHeadingContext(element, owner),
+          section: buildContextSummary(section),
+          landmark: buildContextSummary(landmark),
+        };
+      };
       const isHigherPriorityEntry = (left, right) => compareInteractivePriorityInner(left, right) < 0;
       const insertInteractiveEntry = (entries, limit, entry) => {
         if (entries.length < limit) {
@@ -358,10 +702,12 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
         title: document.title,
         url: window.location.href,
         lang: document.documentElement.lang || undefined,
+        readyState: document.readyState,
         description: document.querySelector('meta[name="description"]')?.getAttribute('content') || undefined,
         text: '',
         headings: [],
         lists: [],
+        tables: [],
         interactives: {
           buttons: [],
           links: [],
@@ -395,12 +741,16 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
         const base = {
           name: getName(element),
           label: getLabel(element),
+          description: getDescription(element),
           testId: element.getAttribute('data-testid') || '',
           css,
           visible: isVisible(owner) && isVisible(element),
           disabled: Boolean(element.disabled),
           ariaDisabled: element.getAttribute('aria-disabled'),
           required: element.required === true || element.getAttribute('aria-required') === 'true',
+          readonly: element.readOnly === true || element.getAttribute('aria-readonly') === 'true',
+          geometry: getGeometry(element),
+          localContext: getLocalContext(element, owner),
           domIndex: meta.anchorIndex ?? -1,
           fromShadow: Boolean(meta.host),
           ...context,
@@ -465,13 +815,17 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
         const entry = finalizeInteractiveEntry({
           role: 'button',
           name: getName(element),
-          text: compactTextInner(element.innerText || element.value || ''),
+          text: getElementText(element),
+          description: getDescription(element),
           testId: element.getAttribute('data-testid') || '',
           css: `${meta.hostCss ? `${meta.hostCss} ` : ''}${getCss(element)}`.trim(),
           visible: isVisible(owner) && isVisible(element),
           disabled: Boolean(element.disabled),
           ariaDisabled: element.getAttribute('aria-disabled'),
           isSubmitControl: element.getAttribute('type') === 'submit',
+          geometry: getGeometry(element),
+          localContext: getLocalContext(element, owner),
+          focusable: typeof element.tabIndex === 'number' ? element.tabIndex >= 0 : true,
           domIndex: meta.anchorIndex ?? -1,
           fromShadow: Boolean(meta.host),
           ...context,
@@ -484,12 +838,16 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
           role: 'link',
           name: getName(element),
           text: compactTextInner(element.innerText || ''),
+          description: getDescription(element),
           testId: element.getAttribute('data-testid') || '',
           href: element.getAttribute('href') || '',
           css: getCss(element),
           visible: isVisible(element),
           disabled: Boolean(element.disabled),
           ariaDisabled: element.getAttribute('aria-disabled'),
+          geometry: getGeometry(element),
+          localContext: getLocalContext(element, element),
+          focusable: typeof element.tabIndex === 'number' ? element.tabIndex >= 0 : true,
           domIndex,
           ...context,
         });
@@ -535,6 +893,16 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
             css: getCss(element),
           });
         }
+      };
+      const addTable = (element) => {
+        const headers = Array.from(element.querySelectorAll('th'))
+          .map((header) => compactTextInner(header.innerText || header.textContent || ''))
+          .filter(Boolean);
+        pushIfRoom(raw.tables, settings.maxLists, {
+          label: element.getAttribute('aria-label') || element.getAttribute('id') || '',
+          headers: headers.slice(0, 5),
+          css: getCss(element),
+        });
       };
       const addFrame = (element) => {
         pushIfRoom(raw.frames, settings.maxFrames, {
@@ -633,6 +1001,10 @@ export async function collectStructuredPageData(pageLike, { detailLevel = 'stand
 
         if (tagName === 'ul' || tagName === 'ol') {
           addList(element);
+        }
+
+        if (tagName === 'table' || element.getAttribute('role') === 'table' || element.getAttribute('role') === 'grid') {
+          addTable(element);
         }
 
         if (tagName === 'iframe') {

@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -39,10 +39,10 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the DemoQA radio-button page', 'brief');
-        await runActions(context, sessionId, 'Select the Yes radio option', [
+        await validatePlaywright(context, sessionId, 'Select the Yes radio option', [
           { type: 'click', locator: { strategy: 'css', value: 'label[for="yesRadio"]' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the selected radio result and disabled state',

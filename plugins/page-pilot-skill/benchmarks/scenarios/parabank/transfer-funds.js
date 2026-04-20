@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -21,8 +21,27 @@ function registrationActions(username) {
     { type: 'fill', locator: { strategy: 'css', value: '#customer\\.password' }, value: 'secret123' },
     { type: 'fill', locator: { strategy: 'css', value: '#repeatedPassword' }, value: 'secret123' },
     { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Register' } } },
+    { type: 'assert_text', locator: { strategy: 'css', value: '#leftPanel' }, value: 'Open New Account' },
   ];
 }
+
+const verifyRegistrationScript = `
+  const bodyText = document.body.textContent.replace(/\\s+/g, ' ').trim();
+  const accountLinks = [...document.querySelectorAll('#leftPanel a')].map((link) => link.textContent.trim()).filter(Boolean);
+  if (!bodyText.includes('Welcome Bench Transfer')) {
+    throw new Error('The ParaBank welcome text is missing after registration.');
+  }
+  if (!accountLinks.includes('Open New Account')) {
+    throw new Error('Open New Account link is missing after registration.');
+  }
+  if (!accountLinks.includes('Transfer Funds')) {
+    throw new Error('Transfer Funds link is missing after registration.');
+  }
+  return {
+    title: document.title,
+    accountLinks,
+  };
+`;
 
 const extractNewAccountIdScript = `
   const accountId = document.querySelector('#newAccountId')?.textContent?.trim() ?? '';
@@ -72,19 +91,68 @@ function buildVerifyTransferResultScript(destinationAccountId) {
   `;
 }
 
+async function ensureOpenAccountPageAvailable(context, sessionId) {
+  const snapshot = await runProbe(
+    context,
+    sessionId,
+    'Inspect the ParaBank open-account page availability',
+    {
+      template: 'document_snapshot',
+      maxTextLength: 2500,
+      timeoutMs: 3000,
+    },
+    (data) => ({
+      title: data.title,
+      url: data.url,
+      textLength: data.textLength,
+    })
+  );
+
+  const combinedText = `${snapshot.data.title ?? ''}\n${snapshot.data.text ?? ''}`;
+  if (/application error|an internal error has occurred and has been logged/i.test(combinedText)) {
+    const error = new Error('ParaBank open-account sandbox is temporarily unavailable.');
+    error.code = 'EXTERNAL_SITE_UNAVAILABLE';
+    error.details = {
+      url: snapshot.data.url ?? null,
+      title: snapshot.data.title ?? null,
+    };
+    throw error;
+  }
+
+  return snapshot;
+}
+
 export const scenario = {
   async run(context) {
-    const username = `bench${Date.now()}t`;
     const sessionRun = await withScenarioSession(
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the ParaBank registration page for the transfer-funds flow', 'brief');
-        await runActions(context, sessionId, 'Register a new ParaBank demo customer for the transfer flow', registrationActions(username));
-        await runActions(context, sessionId, 'Create a second account for transfer destination coverage', [
+        await validatePlaywright(
+          context,
+          sessionId,
+          'Register a new ParaBank demo customer for the transfer flow',
+          registrationActions('{{pagePilot.uniqueUsername:parabank-transfer}}')
+        );
+        await runProbe(
+          context,
+          sessionId,
+          'Verify the post-registration account overview links for the transfer flow',
+          verifyRegistrationScript,
+          (data) => ({
+            title: data.title,
+            accountLinks: data.accountLinks.slice(0, 5),
+          })
+        );
+        await validatePlaywright(context, sessionId, 'Open the account services page for a destination account', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: 'Open New Account' } } },
-          { type: 'click', locator: { strategy: 'css', value: 'input[value="Open New Account"]' } },
         ]);
-        const accountCreation = await executeScript(
+        await ensureOpenAccountPageAvailable(context, sessionId);
+        await validatePlaywright(context, sessionId, 'Create a second account for transfer destination coverage', [
+          { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Open New Account' } } },
+          { type: 'assert_text', locator: { strategy: 'text', value: 'Account Opened!' }, value: 'Account Opened!' },
+        ]);
+        const accountCreation = await runProbe(
           context,
           sessionId,
           'Extract the newly created destination account id',
@@ -92,10 +160,10 @@ export const scenario = {
           (data) => ({ accountId: data.accountId })
         );
 
-        await runActions(context, sessionId, 'Open the Transfer Funds page', [
+        await validatePlaywright(context, sessionId, 'Open the Transfer Funds page', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: 'Transfer Funds' } } },
         ]);
-        const readiness = await executeScript(
+        const readiness = await runProbe(
           context,
           sessionId,
           'Inspect transfer account options',
@@ -117,14 +185,15 @@ export const scenario = {
           throw new Error('Transfer Funds did not expose distinct source and destination accounts.');
         }
 
-        await runActions(context, sessionId, 'Submit the transfer between two ParaBank accounts', [
+        await validatePlaywright(context, sessionId, 'Submit the transfer between two ParaBank accounts', [
           { type: 'fill', locator: { strategy: 'css', value: '#amount' }, value: '25' },
-          { type: 'select', locator: { strategy: 'css', value: '#fromAccountId' }, value: sourceAccountId },
-          { type: 'select', locator: { strategy: 'css', value: '#toAccountId' }, value: destinationAccountId },
+          { type: 'select', locator: { strategy: 'css', value: '#fromAccountId' }, value: '{{pagePilot.option:first}}' },
+          { type: 'select', locator: { strategy: 'css', value: '#toAccountId' }, value: '{{pagePilot.option:last}}' },
           { type: 'click', locator: { strategy: 'css', value: 'input[value="Transfer"]' } },
+          { type: 'assert_text', locator: { strategy: 'text', value: 'Transfer Complete!' }, value: 'Transfer Complete!' },
         ]);
 
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the transfer completion state',
@@ -139,7 +208,6 @@ export const scenario = {
         return {
           summary: 'Registered a ParaBank customer, opened a second account, and completed a transfer.',
           details: {
-            username,
             newAccountId: accountCreation.data.accountId,
             sourceAccountId,
             destinationAccountId,

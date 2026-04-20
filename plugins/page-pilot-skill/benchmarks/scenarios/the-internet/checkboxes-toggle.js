@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -58,7 +58,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the checkboxes page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Record the initial checkbox states',
@@ -68,11 +68,11 @@ export const scenario = {
             checkboxes: data.checkboxes,
           })
         );
-        await runActions(context, sessionId, 'Toggle both checkboxes', [
+        await validatePlaywright(context, sessionId, 'Toggle both checkboxes', [
           { type: 'click', locator: { strategy: 'css', value: '#checkboxes input:nth-of-type(1)' } },
           { type: 'click', locator: { strategy: 'css', value: '#checkboxes input:nth-of-type(2)' } },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify that both checkbox states flipped',

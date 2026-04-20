@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -32,11 +32,11 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the pagination challenge page', 'brief');
-        await runActions(context, sessionId, 'Switch to the second pagination page', [
+        await validatePlaywright(context, sessionId, 'Switch to the second pagination page', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: '2' } } },
           { type: 'assert_url', value: 'pageno=2' },
         ]);
-        const extraction = await executeScript(
+        const extraction = await runProbe(
           context,
           sessionId,
           'Extract the second-page table rows',

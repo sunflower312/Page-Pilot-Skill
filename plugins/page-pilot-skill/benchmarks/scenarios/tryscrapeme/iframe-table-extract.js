@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -117,7 +117,7 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the iframe practice page', 'brief');
-      const iframeProbe = await executeScript(
+      const iframeProbe = await runProbe(
         context,
         sessionId,
         'Inspect the embedded iframe from the parent page DOM',
@@ -150,7 +150,7 @@ export const scenario = {
             title: frameSession.title ?? null,
             parentAccessError: iframeProbe.data.accessError,
           });
-          return await executeScript(
+          return await runProbe(
             context,
             frameSessionId,
             'Extract rows from the iframe source document DOM',

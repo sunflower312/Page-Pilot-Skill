@@ -1,23 +1,26 @@
 # Workflows
 
-## Read a page and draft Playwright
+## Scan a page and draft Playwright
 
 1. `browser_open`
 2. `browser_scan`
-3. Extract the most stable locator candidates
-4. Write the minimal Playwright snippet
-5. If confidence is low, validate with `browser_run_actions`
+3. `browser_rank_locators`
+4. Extract the most stable locator candidates from scan evidence
+5. If confidence is low, validate the target interaction with `browser_validate_playwright`
+6. Write the minimal Playwright snippet
 
-## Debug a broken fill or click
+## Validate a broken fill or click
 
-1. Reproduce with a short `browser_run_actions` sequence
-2. If the element is still ambiguous, inspect attributes with `browser_execute_js`
-3. Capture a screenshot only if visual state matters
-4. Rewrite the locator based on evidence
+1. Reproduce with a short `browser_validate_playwright` sequence
+2. If the element is still ambiguous, inspect one focused question with `browser_probe`
+3. If validation still fails, run `browser_repair_playwright`
+4. Capture a screenshot only if visual state matters
+5. Rewrite the locator based on evidence
 
-## Validate a form flow
+## Validate a form flow before code generation
 
 1. Open the page
 2. Scan the structure
-3. Run `fill -> click -> wait_for -> assert_text`
-4. Save storage state if the resulting session should be reused
+3. Run `fill -> click -> wait_for -> assert_text` through `browser_validate_playwright`
+4. Generate Playwright only after the form result is backed by scan or validation evidence
+5. Save storage state if the resulting session should be reused

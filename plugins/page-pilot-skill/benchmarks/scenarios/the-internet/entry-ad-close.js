@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -61,7 +61,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the entry-ad page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Wait for the entry-ad modal to appear',
@@ -72,10 +72,10 @@ export const scenario = {
             closeText: data.closeText,
           })
         );
-        await runActions(context, sessionId, 'Close the entry-ad modal', [
+        await validatePlaywright(context, sessionId, 'Close the entry-ad modal', [
           { type: 'click', locator: { strategy: 'text', value: 'Close' } },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify that the entry-ad modal is hidden',

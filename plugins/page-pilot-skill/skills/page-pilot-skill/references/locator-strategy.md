@@ -12,6 +12,7 @@ Use locator strategies in this order:
 Guidelines:
 
 - Prefer user-facing semantics over structural selectors.
-- If two candidates are equally plausible, validate them with `browser_run_actions`.
+- Do not assume `testId` should automatically outrank stronger user-facing semantics.
+- If two candidates are equally plausible, rank them with `browser_rank_locators`, then validate the winner with `browser_validate_playwright`.
 - Avoid XPath unless there is no practical alternative.
 - Treat raw class selectors as fragile by default.

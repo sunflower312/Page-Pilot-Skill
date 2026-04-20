@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -60,7 +60,7 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the AJAX film page', 'brief');
-      const baseline = await executeScript(
+      const baseline = await runProbe(
         context,
         sessionId,
         'Capture the film rows before selecting a year',
@@ -71,11 +71,11 @@ export const scenario = {
           firstTitle: data.titles[0] ?? null,
         })
       );
-      await runActions(context, sessionId, 'Load the 2015 film list', [
+      await validatePlaywright(context, sessionId, 'Load the 2015 film list', [
         { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: '2015' } } },
         { type: 'assert_url', value: '#2015' },
       ]);
-      const extraction = await executeScript(
+      const extraction = await runProbe(
         context,
         sessionId,
         'Extract the loaded AJAX film rows',

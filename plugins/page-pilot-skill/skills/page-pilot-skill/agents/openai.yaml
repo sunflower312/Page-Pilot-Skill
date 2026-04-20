@@ -1,4 +1,4 @@
 interface:
   display_name: "Page Pilot Skill"
-  short_description: "Headless Playwright browser workflows for Codex"
-  default_prompt: "Inspect a page headlessly, collect evidence, and help write reliable Playwright automation"
+  short_description: "Semantic page analysis, locator ranking, validation, and Playwright code generation for Codex"
+  default_prompt: "Scan a page, rank locator options, validate key interactions, generate Playwright from validated evidence, and repair weak code paths"

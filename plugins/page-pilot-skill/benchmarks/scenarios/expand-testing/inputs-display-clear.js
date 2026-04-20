@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -39,24 +39,24 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the inputs practice page', 'brief');
-        await runActions(context, sessionId, 'Fill the inputs and display their values', [
+        await validatePlaywright(context, sessionId, 'Fill the inputs and display their values', [
           { type: 'fill', locator: { strategy: 'css', value: '#input-number' }, value: '42' },
           { type: 'fill', locator: { strategy: 'css', value: '#input-text' }, value: 'hello benchmark' },
           { type: 'fill', locator: { strategy: 'css', value: '#input-password' }, value: 'secret123' },
           { type: 'fill', locator: { strategy: 'css', value: '#input-date' }, value: '2026-04-18' },
           { type: 'click', locator: { strategy: 'css', value: '#btn-display-inputs' } },
         ]);
-        const displayed = await executeScript(
+        const displayed = await runProbe(
           context,
           sessionId,
           'Verify the displayed output values',
           verifyDisplayedValuesScript,
           (data) => ({ displayedCount: data.displayed.length })
         );
-        await runActions(context, sessionId, 'Clear the input values', [
+        await validatePlaywright(context, sessionId, 'Clear the input values', [
           { type: 'click', locator: { strategy: 'css', value: '#btn-clear-inputs' } },
         ]);
-        const cleared = await executeScript(
+        const cleared = await runProbe(
           context,
           sessionId,
           'Verify the fields were cleared',

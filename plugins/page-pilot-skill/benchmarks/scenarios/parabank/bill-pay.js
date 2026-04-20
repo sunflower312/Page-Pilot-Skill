@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -49,16 +49,20 @@ const verifyBillPayResultScript = `
 
 export const scenario = {
   async run(context) {
-    const username = `bench${Date.now()}b`;
     const sessionRun = await withScenarioSession(
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the ParaBank registration page for the bill-pay flow', 'brief');
-        await runActions(context, sessionId, 'Register a new ParaBank customer for the bill-pay flow', registrationActions(username));
-        await runActions(context, sessionId, 'Open the Bill Pay page', [
+        await validatePlaywright(
+          context,
+          sessionId,
+          'Register a new ParaBank customer for the bill-pay flow',
+          registrationActions('{{pagePilot.uniqueUsername:parabank-bill-pay}}')
+        );
+        await validatePlaywright(context, sessionId, 'Open the Bill Pay page', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: 'Bill Pay' } } },
         ]);
-        const readiness = await executeScript(
+        const readiness = await runProbe(
           context,
           sessionId,
           'Verify that the Bill Pay page has source account options',
@@ -66,7 +70,7 @@ export const scenario = {
           (data) => ({ accountOptionCount: data.accountOptions.length })
         );
         const firstAccountId = readiness.data.accountOptions[0].value;
-        await runActions(context, sessionId, 'Submit a bill payment', [
+        await validatePlaywright(context, sessionId, 'Submit a bill payment', [
           { type: 'fill', locator: { strategy: 'css', value: 'input[name="payee.name"]' }, value: 'Utility Company' },
           {
             type: 'fill',
@@ -80,10 +84,10 @@ export const scenario = {
           { type: 'fill', locator: { strategy: 'css', value: 'input[name="payee.accountNumber"]' }, value: '123456789' },
           { type: 'fill', locator: { strategy: 'css', value: 'input[name="verifyAccount"]' }, value: '123456789' },
           { type: 'fill', locator: { strategy: 'css', value: 'input[name="amount"]' }, value: '25' },
-          { type: 'select', locator: { strategy: 'css', value: 'select[name="fromAccountId"]' }, value: firstAccountId },
+          { type: 'select', locator: { strategy: 'css', value: 'select[name="fromAccountId"]' }, value: '{{pagePilot.option:first}}' },
           { type: 'click', locator: { strategy: 'css', value: 'input[value="Send Payment"]' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the Bill Payment confirmation',
@@ -94,8 +98,8 @@ export const scenario = {
         return {
           summary: 'Registered a ParaBank demo customer and completed a bill payment.',
           details: {
-            username,
             accountOptionCount: readiness.data.accountOptions.length,
+            firstAccountId,
             ...verification.data,
           },
         };

@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -30,10 +30,10 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the DemoQA web tables page', 'brief');
-        await runActions(context, sessionId, 'Search the web table for Cierra', [
+        await validatePlaywright(context, sessionId, 'Search the web table for Cierra', [
           { type: 'fill', locator: { strategy: 'css', value: '#searchBox' }, value: 'Cierra' },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the filtered web table rows',

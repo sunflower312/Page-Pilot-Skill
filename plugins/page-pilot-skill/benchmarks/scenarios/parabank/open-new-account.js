@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -21,8 +21,24 @@ function registrationActions(username) {
     { type: 'fill', locator: { strategy: 'css', value: '#customer\\.password' }, value: 'secret123' },
     { type: 'fill', locator: { strategy: 'css', value: '#repeatedPassword' }, value: 'secret123' },
     { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Register' } } },
+    { type: 'assert_text', locator: { strategy: 'css', value: '#leftPanel' }, value: 'Open New Account' },
   ];
 }
+
+const verifyRegistrationScript = `
+  const bodyText = document.body.textContent.replace(/\\s+/g, ' ').trim();
+  const accountLinks = [...document.querySelectorAll('#leftPanel a')].map((link) => link.textContent.trim()).filter(Boolean);
+  if (!bodyText.includes('Welcome Bench User')) {
+    throw new Error('The ParaBank welcome text is missing after registration.');
+  }
+  if (!accountLinks.includes('Open New Account')) {
+    throw new Error('Open New Account link is missing after registration.');
+  }
+  return {
+    title: document.title,
+    accountLinks,
+  };
+`;
 
 const verifyNewAccountScript = `
   const bodyText = document.body.textContent.replace(/\\s+/g, ' ').trim();
@@ -40,19 +56,68 @@ const verifyNewAccountScript = `
   };
 `;
 
+async function ensureOpenAccountPageAvailable(context, sessionId) {
+  const snapshot = await runProbe(
+    context,
+    sessionId,
+    'Inspect the ParaBank open-account page availability',
+    {
+      template: 'document_snapshot',
+      maxTextLength: 2500,
+      timeoutMs: 3000,
+    },
+    (data) => ({
+      title: data.title,
+      url: data.url,
+      textLength: data.textLength,
+    })
+  );
+
+  const combinedText = `${snapshot.data.title ?? ''}\n${snapshot.data.text ?? ''}`;
+  if (/application error|an internal error has occurred and has been logged/i.test(combinedText)) {
+    const error = new Error('ParaBank open-account sandbox is temporarily unavailable.');
+    error.code = 'EXTERNAL_SITE_UNAVAILABLE';
+    error.details = {
+      url: snapshot.data.url ?? null,
+      title: snapshot.data.title ?? null,
+    };
+    throw error;
+  }
+
+  return snapshot;
+}
+
 export const scenario = {
   async run(context) {
-    const username = `bench${Date.now()}a`;
     const sessionRun = await withScenarioSession(
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the ParaBank registration page for the open-account flow', 'brief');
-        await runActions(context, sessionId, 'Register a new ParaBank customer for the open-account flow', registrationActions(username));
-        await runActions(context, sessionId, 'Open a new account from the account services menu', [
+        await validatePlaywright(
+          context,
+          sessionId,
+          'Register a new ParaBank customer for the open-account flow',
+          registrationActions('{{pagePilot.uniqueUsername:parabank-open-account}}')
+        );
+        await runProbe(
+          context,
+          sessionId,
+          'Verify the post-registration account overview links for the open-account flow',
+          verifyRegistrationScript,
+          (data) => ({
+            title: data.title,
+            accountLinks: data.accountLinks.slice(0, 4),
+          })
+        );
+        await validatePlaywright(context, sessionId, 'Open the account services page for a new account', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: 'Open New Account' } } },
-          { type: 'click', locator: { strategy: 'css', value: 'input[value="Open New Account"]' } },
         ]);
-        const verification = await executeScript(
+        await ensureOpenAccountPageAvailable(context, sessionId);
+        await validatePlaywright(context, sessionId, 'Submit the ParaBank open-account form', [
+          { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Open New Account' } } },
+          { type: 'assert_text', locator: { strategy: 'text', value: 'Account Opened!' }, value: 'Account Opened!' },
+        ]);
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the open-account success state',
@@ -66,7 +131,6 @@ export const scenario = {
         return {
           summary: 'Registered a ParaBank demo customer and opened a new account successfully.',
           details: {
-            username,
             ...verification.data,
           },
         };

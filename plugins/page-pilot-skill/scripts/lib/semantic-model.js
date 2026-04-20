@@ -42,6 +42,10 @@ function sortInteractiveEntries(entries = []) {
   return [...entries].sort(compareInteractivePriority);
 }
 
+function getSemanticLabel(entry = {}) {
+  return compactText(entry.accessibleName || entry.name || entry.label || entry.visibleText || entry.text || '');
+}
+
 export function selectActiveDialog(dialogs = []) {
   return dialogs.find((dialog) => dialog.open !== false && dialog.visible !== false) ?? dialogs.find((dialog) => dialog.open !== false) ?? null;
 }
@@ -79,7 +83,7 @@ function normalizePrimaryAction(entry = null) {
   const normalized = finalizeInteractiveEntry(entry);
 
   return {
-    label: getInteractiveLabel(normalized),
+    label: getSemanticLabel(normalized) || getInteractiveLabel(normalized),
     role: normalized.role || (normalized.group === 'links' ? 'link' : 'button'),
     disabled: normalized.disabled === true,
     withinDialog: normalized.withinDialog === true,
@@ -113,7 +117,7 @@ function normalizeRegionText(value, maxChars) {
 function normalizeInteractionEntry(entry = {}) {
   const normalizedEntry = finalizeInteractiveEntry(entry);
   const normalized = {
-    label: getInteractiveLabel(normalizedEntry),
+    label: getSemanticLabel(normalizedEntry) || getInteractiveLabel(normalizedEntry),
     role:
       normalizedEntry.role ||
       (normalizedEntry.group === 'links' ? 'link' : normalizedEntry.group === 'buttons' ? 'button' : normalizedEntry.role || 'control'),
@@ -182,9 +186,12 @@ function normalizeSemanticInteractiveCandidate(entry = null, overrides = {}) {
     ...entry,
     ...overrides,
     group: overrides.group ?? inferSemanticGroup(entry),
-    name: entry.name ?? entry.label ?? entry.text ?? '',
-    text: entry.text ?? entry.label ?? entry.name ?? '',
-    label: entry.label ?? entry.name ?? entry.text ?? '',
+    accessibleName: entry.accessibleName ?? entry.name ?? entry.label ?? entry.text ?? '',
+    visibleText: entry.visibleText ?? entry.text ?? entry.label ?? entry.name ?? '',
+    description: entry.description ?? '',
+    name: entry.name ?? entry.accessibleName ?? entry.label ?? entry.text ?? '',
+    text: entry.text ?? entry.visibleText ?? entry.label ?? entry.name ?? '',
+    label: entry.label ?? entry.accessibleName ?? entry.name ?? entry.text ?? '',
   });
 }
 

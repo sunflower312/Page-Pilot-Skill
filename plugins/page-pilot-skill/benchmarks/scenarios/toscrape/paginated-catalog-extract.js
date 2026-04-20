@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -30,11 +30,11 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the catalogue landing page', 'brief');
-      await runActions(context, sessionId, 'Advance to the second catalogue page', [
+      await validatePlaywright(context, sessionId, 'Advance to the second catalogue page', [
         { type: 'click', locator: { strategy: 'role', value: { role: 'link', name: 'next' } } },
         { type: 'assert_url', value: 'page-2.html' },
       ]);
-      const extraction = await executeScript(
+      const extraction = await runProbe(
         context,
         sessionId,
         'Extract book metadata from the second page',

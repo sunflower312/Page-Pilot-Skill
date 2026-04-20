@@ -123,18 +123,29 @@ function createNavigationInterruptionError(error) {
   return wrapped;
 }
 
-export async function executeScript(page, script) {
+export async function executeReadonlyScriptProbe(page, { source, timeoutMs = 3000 }) {
   try {
     return await page.evaluate(
-      async ({ source, serializerSource }) => {
+      async ({ source, serializerSource, timeoutMs }) => {
         const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
         const fn = new AsyncFunction(source);
         const serialize = new Function(`return (${serializerSource});`)();
-        return serialize(await fn());
+        const timeoutResult = await Promise.race([
+          fn(),
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              const error = new Error(`Probe timed out after ${timeoutMs}ms`);
+              error.code = 'PROBE_TIMEOUT';
+              reject(error);
+            }, timeoutMs)
+          ),
+        ]);
+        return serialize(timeoutResult);
       },
       {
-        source: script,
+        source,
         serializerSource: serializeForTransport.toString(),
+        timeoutMs,
       }
     );
   } catch (error) {

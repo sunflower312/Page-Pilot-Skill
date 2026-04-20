@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -24,7 +24,7 @@ async function waitForProgressTarget(context, sessionId, target = 60, timeoutMs 
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    const state = await executeScript(
+    const state = await runProbe(
       context,
       sessionId,
       'Read the current progress-bar state',
@@ -44,7 +44,7 @@ async function waitForProgressAdvance(context, sessionId, initialValue, timeoutM
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    const state = await executeScript(
+    const state = await runProbe(
       context,
       sessionId,
       'Read the current progress-bar state',
@@ -99,35 +99,31 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the progress bar page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Record the initial progress-bar state',
           readProgressStateScript,
           (data) => ({ value: data.value, resultText: data.resultText })
         );
-        await runActions(context, sessionId, 'Start the progress bar', [
+        await validatePlaywright(context, sessionId, 'Start the progress bar', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Start' } } },
         ]);
         const started = await waitForProgressAdvance(context, sessionId, before.data.value);
         if (!started) {
-          await executeScript(
-            context,
-            sessionId,
-            'Retry starting the progress bar from page JavaScript',
-            'document.querySelector("#startButton")?.click(); return true;',
-            () => ({ retried: true })
-          );
+          await validatePlaywright(context, sessionId, 'Retry starting the progress bar with a second button click', [
+            { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Start' } } },
+          ]);
           const retriedStart = await waitForProgressAdvance(context, sessionId, before.data.value);
           if (!retriedStart) {
             throw new Error('The progress bar never advanced after two start attempts.');
           }
         }
         const nearTarget = await waitForProgressTarget(context, sessionId);
-        await runActions(context, sessionId, 'Stop the progress bar near the target', [
+        await validatePlaywright(context, sessionId, 'Stop the progress bar near the target', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Stop' } } },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify the stopped progress-bar state',

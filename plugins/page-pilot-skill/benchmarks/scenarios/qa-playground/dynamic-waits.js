@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -32,11 +32,11 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the dynamic waits practice page', 'brief');
-        await runActions(context, sessionId, 'Trigger two delayed UI states', [
+        await validatePlaywright(context, sessionId, 'Trigger two delayed UI states', [
           { type: 'click', locator: { strategy: 'testId', value: 'btn-show-element' } },
           { type: 'click', locator: { strategy: 'testId', value: 'btn-activate-trigger' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Wait for the delayed element and enabled button',

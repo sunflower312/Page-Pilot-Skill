@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
-import { listBenchmarks, runBenchmarks } from '../benchmarks/lib/benchmark-runner.js';
+import { benchmarkRunSucceeded, listBenchmarks, runBenchmarks } from '../benchmarks/lib/benchmark-runner.js';
 
 function stamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -187,7 +187,7 @@ async function main() {
   });
 
   printSummary(run);
-  process.exitCode = run.acceptance.ok ? 0 : 1;
+  process.exitCode = benchmarkRunSucceeded(run) ? 0 : 1;
 }
 
 main().catch((error) => {

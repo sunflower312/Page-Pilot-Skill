@@ -1,6 +1,5 @@
 import { runActions } from './action-runner.js';
 import { buildObservation, captureObservationSnapshot } from './observation.js';
-import { buildPageStateModel } from './strategy-state.js';
 import { collectStructuredPageData } from './structured-scan.js';
 
 async function captureActionArtifact(sessionId, action, page, locator, artifactManager) {
@@ -23,14 +22,13 @@ export async function executeSessionActions({ sessionId, session, actions, artif
     capture: async (action, page, locator) => captureActionArtifact(sessionId, action, page, locator, artifactManager),
   });
   const after = await captureObservationSnapshot(session.page);
-  const strategyScan = await collectStructuredPageData(session.page, { detailLevel: 'brief' }).catch(() => null);
+  const semanticScan = await collectStructuredPageData(session.page, { detailLevel: 'brief' }).catch(() => null);
 
   return {
     before,
     after,
     observation: buildObservation(before, after),
     result,
-    strategyScan,
-    strategyState: strategyScan ? buildPageStateModel(strategyScan) : null,
+    semanticScan,
   };
 }

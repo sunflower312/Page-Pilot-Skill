@@ -234,10 +234,14 @@ export function buildEmptySummary() {
     passed: 0,
     failed: 0,
     skipped: 0,
+    externalUnavailableSkipped: 0,
   };
 }
 
 export function summarizeResults(sites = [], results = []) {
+  const externalUnavailableSkipped = results.filter(
+    (result) => result.status === 'skipped' && result.reason?.code === 'EXTERNAL_SITE_UNAVAILABLE'
+  ).length;
   return {
     siteCount: sites.length,
     selectedScenarioCount: results.length,
@@ -245,6 +249,7 @@ export function summarizeResults(sites = [], results = []) {
     passed: results.filter((result) => result.status === 'passed').length,
     failed: results.filter((result) => result.status === 'failed').length,
     skipped: results.filter((result) => result.status === 'skipped').length,
+    externalUnavailableSkipped,
   };
 }
 
@@ -272,11 +277,13 @@ export function summarizeCatalog(sites = []) {
 }
 
 export function evaluateAcceptance(summary = buildEmptySummary()) {
-  if (summary.selectedScenarioCount === 0) {
+  const effectiveSelectedScenarioCount = summary.selectedScenarioCount - (summary.externalUnavailableSkipped ?? 0);
+
+  if (effectiveSelectedScenarioCount === 0) {
     return {
       ok: false,
-      code: 'NO_SCENARIOS_SELECTED',
-      message: 'No qualified benchmark scenarios matched the current filters.',
+      code: 'NO_SCENARIOS_AVAILABLE',
+      message: 'No executable benchmark scenarios remained after excluding unavailable external sites.',
     };
   }
 
@@ -292,21 +299,22 @@ export function evaluateAcceptance(summary = buildEmptySummary()) {
     return {
       ok: false,
       code: 'NO_SCENARIOS_PASSED',
-      message: 'Selected benchmark scenarios executed, but none passed.',
+      message: 'Executable benchmark scenarios ran, but none passed.',
     };
   }
 
-  if (summary.failed > 0 || summary.skipped > 0 || summary.passed !== summary.selectedScenarioCount) {
+  const blockingSkipped = summary.skipped - (summary.externalUnavailableSkipped ?? 0);
+  if (summary.failed > 0 || blockingSkipped > 0 || summary.passed !== effectiveSelectedScenarioCount) {
     return {
       ok: false,
       code: 'BENCHMARKS_INCOMPLETE',
-      message: `Acceptance failed: ${summary.passed}/${summary.selectedScenarioCount} selected scenario(s) passed.`,
+      message: `Acceptance failed: ${summary.passed}/${effectiveSelectedScenarioCount} executable scenario(s) passed.`,
     };
   }
 
   return {
     ok: true,
     code: 'ACCEPTANCE_PASSED',
-    message: `Acceptance passed: ${summary.passed}/${summary.selectedScenarioCount} selected scenario(s) passed.`,
+    message: `Acceptance passed: ${summary.passed}/${effectiveSelectedScenarioCount} executable scenario(s) passed.`,
   };
 }

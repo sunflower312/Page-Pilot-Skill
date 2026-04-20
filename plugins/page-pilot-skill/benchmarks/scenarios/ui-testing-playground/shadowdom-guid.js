@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -63,7 +63,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the shadow DOM GUID page', 'brief');
-        const setup = await executeScript(
+        const setup = await runProbe(
           context,
           sessionId,
           'Install a clipboard capture hook inside the page',
@@ -74,11 +74,11 @@ export const scenario = {
             hadOriginalWriteText: data.hadOriginalWriteText,
           })
         );
-        await runActions(context, sessionId, 'Generate a GUID and copy it from the shadow root', [
+        await validatePlaywright(context, sessionId, 'Generate a GUID and copy it from the shadow root', [
           { type: 'click', locator: { strategy: 'css', value: 'guid-generator #buttonGenerate' } },
           { type: 'click', locator: { strategy: 'css', value: 'guid-generator #buttonCopy' } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the generated GUID format and copied text',

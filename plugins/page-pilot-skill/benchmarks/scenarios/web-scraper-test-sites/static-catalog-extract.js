@@ -1,6 +1,6 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
   scanPage,
   withScenarioSession,
@@ -43,7 +43,7 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the static catalogue page', 'brief');
-      const extraction = await executeScript(
+      const extraction = await runProbe(
         context,
         sessionId,
         'Extract catalogue cards from the computers page',

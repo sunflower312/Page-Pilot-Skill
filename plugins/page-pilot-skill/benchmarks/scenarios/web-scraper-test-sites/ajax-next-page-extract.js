@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -61,7 +61,7 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the AJAX catalogue page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Read the initial AJAX catalogue page',
@@ -72,10 +72,10 @@ export const scenario = {
             count: data.titles.length,
           })
         );
-        await runActions(context, sessionId, 'Move to page 2 of the AJAX catalogue', [
+        await validatePlaywright(context, sessionId, 'Move to page 2 of the AJAX catalogue', [
           { type: 'click', locator: { strategy: 'css', value: 'button.page-link.page[data-id=\"2\"]' } },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify the later AJAX catalogue page',

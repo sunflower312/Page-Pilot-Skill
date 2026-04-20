@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -50,20 +50,20 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the dynamic ID playground page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Attach a click probe to the dynamic-ID button',
           attachProbeScript,
           (data) => ({ currentId: data.currentId })
         );
-        await runActions(context, sessionId, 'Click the dynamic-ID button by accessible name', [
+        await validatePlaywright(context, sessionId, 'Click the dynamic-ID button by accessible name', [
           {
             type: 'click',
             locator: { strategy: 'role', value: { role: 'button', name: 'Button with Dynamic ID' } },
           },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify that the click probe observed the interaction',

@@ -2,123 +2,190 @@
 
 ## Goal
 
-把 `page-pilot-skill` 从“通用 headless 浏览器代理”收口为“帮助模型编写更可靠 Playwright / 网页自动化代码的语义辅助工具”，并以此作为后续开发主线。
+把 `page-pilot-skill` 落地为一个**代码生成辅助工具**，而不是缩小版 Agent Browser。后续开发必须围绕固定主闭环展开：
+
+`scan/analyze -> locator ranking -> interaction validation -> code generation -> generated-code verification/repair`
 
 ## Architecture
 
-以 `scan / analyze -> locator ranking -> code generation -> validation / repair -> benchmark` 为主干。保留必要的真实动作验证能力，但不再继续优先扩张长期自主执行、站点记忆和复杂规划能力。
+以页面语义对象模型为中心，把工具面、代码生成、验证链路和 benchmark 全部收口到“帮助模型写出更可靠 Playwright 代码”这一目标上。旧的代理式工具和模块不保留兼容层，直接删除。
 
-## Phase 1: 收口产品面与 MCP 工具面
-
-**Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/mcp-server.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/skills/page-pilot-skill/SKILL.md`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/benchmarks/README.md`
-- Modify: `/data/work/AgentBrowser/AGENTS.md`
-
-- [ ] 将核心能力定义为 `scan / analyze`、locator 排序、代码生成、生成后验证
-- [ ] 把 `browser_execute_js` 明确降级为受控只读探针方向
-- [ ] 将 `browser_strategy_report`、`browser_explore_goal` 标记为非核心，不再作为主线演进入口
-- [ ] 更新 skill 与项目文档，使描述与新定位一致
-
-## Phase 2: 升级 scan / analyze 数据模型
+## Phase 1: 收紧入口叙事与工具契约
 
 **Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/structured-scan.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/semantic-model.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/interactive-priority.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/tests/unit/*.test.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/tests/integration/*.test.js`
+- Modify: `plugins/page-pilot-skill/scripts/mcp-server.js`
+- Modify: `plugins/page-pilot-skill/skills/page-pilot-skill/SKILL.md`
+- Modify: `plugins/page-pilot-skill/skills/page-pilot-skill/agents/openai.yaml`
+- Modify: `plugins/page-pilot-skill/agents/openai.yaml`
+- Modify: `plugins/page-pilot-skill/benchmarks/README.md`
+- Modify: `AGENTS.md`
 
-- [ ] 让高价值候选元素默认带上 ARIA / accessibility 优先的语义字段
-- [ ] 补齐元素状态、局部上下文、geometry、stable fingerprint
-- [ ] 明确“局部容器上下文”，例如 form / dialog / table / heading
-- [ ] 控制输出体量，确保结果仍适合模型消费
+**Deliverables:**
+- 主闭环文案统一稿
+- MCP 主工具清单
+- 删除工具清单
+- `browser_probe` / `browser_validate_playwright` / `browser_repair_playwright` 契约草案
+
+- [x] 将所有入口文案统一为 `scan/analyze -> locator ranking -> interaction validation -> code generation -> generated-code verification/repair`
+- [x] 从 spec、plan、skill、MCP 描述中移除 agent / orchestration / long-running workflow 叙事
+- [x] 在 `mcp-server.js` 中写清新的主工具集合
+- [x] 明确旧工具直接删除，不写 deprecated 或兼容说明
+
+## Phase 2: 定义语义对象模型与 scan schema
+
+**Files:**
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/semantic-model.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/structured-scan.test.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/semantic-model.test.js`
+- Modify: `plugins/page-pilot-skill/tests/integration/browser-workflow.test.js`
+
+**Deliverables:**
+- `browser_scan` result schema
+- 元素级语义对象模型
+- `stableFingerprint` schema
+- `confidence` schema
+
+- [x] 将 `browser_scan` 输出定义为页面语义对象模型，而不是增强 DOM 扫描
+- [x] 显式拆出 `accessibleName`、`visibleText`、`description`、`state`、`actionability`、`localContext`、`geometry`、`recommendedLocators`、`stableFingerprint`、`confidence`
+- [x] 让 scan 输出适合模型直接消费，而不是要求模型二次拼装
+- [x] 为 schema 增加测试，防止字段再次退化为混合文本字段
 
 ## Phase 3: 重构 locator ranking
 
 **Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/locator-candidates.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/locator-runtime.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/tests/unit/*.test.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/locator-candidates.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/locator-runtime.js`
+- Create: `plugins/page-pilot-skill/scripts/lib/locator-ranking.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/interactive-priority.test.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/semantic-model.test.js`
 
-- [ ] 把排序从“字段优先级”升级为“语义强度 + 唯一性 + 稳定性 + 可读性”
-- [ ] 默认优先高质量 `getByRole` / `getByLabel`
-- [ ] 让 `testId` 作为强候选而不是写死的全局第一名
-- [ ] 为 CSS fallback 建立显式降级理由
+**Deliverables:**
+- locator ranking result schema
+- ranking reason schema
+- CSS fallback policy
 
-## Phase 4: 生成受控只读 probe
+- [x] 新增明确的 ranking 模块，不再用字段优先级隐式代替排序规则
+- [x] 以 Playwright 语义 locator 为中心排序
+- [x] 去掉固定 `testId-first`
+- [x] 为每个推荐 locator 输出命中数、稳定性原因、降级原因和置信度
+- [x] 写清 CSS fallback 只能是最后选项
 
-**Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/script-execution.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/mcp-server.js`
-- Create or Modify as needed under: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/`
-
-- [ ] 将任意脚本执行重构为默认只读 probe 模式
-- [ ] 提供少量高价值内置 probe 模板
-- [ ] 允许在确有必要时显式使用更低级能力，但默认不暴露为主路径
-
-## Phase 5: 重构 Playwright code generation
+## Phase 4: 用只读 probe 取代任意脚本执行
 
 **Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/playwright-generator.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/assertion-text.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/tests/unit/playwright-generator.test.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/script-execution.js`
+- Modify: `plugins/page-pilot-skill/scripts/mcp-server.js`
+- Create: `plugins/page-pilot-skill/scripts/lib/probe-templates.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/script-execution.test.js`
+- Modify: `plugins/page-pilot-skill/tests/integration/mcp-server.test.js`
 
-- [ ] 让 codegen 直接消费更丰富的语义候选信息
-- [ ] 默认产出更语义化、更短的 Playwright 代码
-- [ ] 在必要时保留明确的降级说明
-- [ ] 让 assertion 与动作表达更贴近真实页面语义
+**Deliverables:**
+- `browser_probe` tool contract
+- probe request schema
+- probe response schema
+- 只读边界说明
 
-## Phase 6: 增加生成后验证 / 修复
+- [x] 删除 `browser_execute_js`
+- [x] 新增 `browser_probe`
+- [x] 只允许只读、可序列化、超时受限探针
+- [x] 预置少量高价值 probe 模板，而不是默认放开任意脚本
+- [x] 用测试锁住只读边界
 
-**Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/action-runner.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/observation.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/action-stability.js`
-- Create or Modify as needed under: `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/tests/unit/*.test.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/tests/integration/*.test.js`
-
-- [ ] 校验生成 locator 是否可命中、是否唯一、是否可交互
-- [ ] 校验动作后是否出现预期状态变化
-- [ ] 增加有限修复链路：重排候选、降级 locator、修正 assertion 或等待
-- [ ] 输出“首轮通过 / 修复后通过 / 无法修复”的结构化结果
-
-## Phase 7: Benchmark 重构为代码质量基准
+## Phase 5: 重写 code generation 契约
 
 **Files:**
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/benchmarks/README.md`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/benchmarks/lib/coverage-matrix.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/benchmarks/lib/report-writer.js`
-- Modify: `/data/work/AgentBrowser/plugins/page-pilot-skill/benchmarks/registry/sites.js`
-- Modify or Create as needed under: `/data/work/AgentBrowser/plugins/page-pilot-skill/benchmarks/scenarios/`
+- Modify: `plugins/page-pilot-skill/scripts/lib/playwright-generator.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/assertion-text.js`
+- Modify: `plugins/page-pilot-skill/scripts/mcp-server.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/playwright-generator.test.js`
 
-- [ ] 将 benchmark 指标改为“代码是否更稳、更短、更语义化、更少脆弱 locator”
-- [ ] 为真实站点场景补 codegen 质量断言
-- [ ] 增加生成后验证与修复通过率统计
-- [ ] 将自主任务式成功标准降级为辅助参考，不再作为主门禁
+**Deliverables:**
+- `browser_generate_playwright` session-based input schema
+- `browser_generate_playwright` output schema
+- codegen warning schema
 
-## Phase 8: 降级或冻结非核心代理模块
+- [x] 让 codegen 以“语义候选 + 排序结果 + 已验证信息”为输入
+- [x] 停止从成功动作回放直接还原代码
+- [x] 输出 locator 选择理由、fallback 选择和 assertion 计划
+- [x] 输出 `generatedPlan` 供生成后复验使用
+- [x] 默认生成更短、更语义化的 Playwright 代码
+
+## Phase 6: 建立验证与修复工具
 
 **Files:**
-- Modify or Delete as needed:
-  - `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/goal-orchestrator.js`
-  - `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/goal-planner.js`
-  - `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/strategy-report.js`
-  - `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/strategy-state.js`
-  - `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/site-intelligence-store.js`
-  - `/data/work/AgentBrowser/plugins/page-pilot-skill/scripts/lib/workflow-intelligence.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/action-runner.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/observation.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/action-stability.js`
+- Create: `plugins/page-pilot-skill/scripts/lib/playwright-validation.js`
+- Modify: `plugins/page-pilot-skill/scripts/mcp-server.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/action-runner.test.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/action-stability.test.js`
+- Modify: `plugins/page-pilot-skill/tests/integration/browser-workflow.test.js`
 
-- [ ] 标记哪些模块保留兼容、哪些模块冻结、哪些模块后续删除
-- [ ] 确保这些模块不再主导 benchmark 和产品叙事
-- [ ] 收紧测试与文档，使主线只围绕语义辅助与代码生成
+**Deliverables:**
+- `browser_validate_playwright` tool contract
+- validation result schema
+- `browser_repair_playwright` tool contract
+- repair result schema
+
+- [x] 删除 `browser_run_actions` 作为主路径
+- [x] 将必要的真实动作验证能力收进 `browser_validate_playwright`
+- [x] 验证 locator 是否唯一命中、元素是否可交互、动作后是否有预期状态变化、assertion 是否通过
+- [x] 新增 `browser_repair_playwright`，只允许有限修复：候选重排、locator 更换、等待修正、assertion 修正
+- [x] 让验证和修复结果结构化输出，供模型继续决策
+
+## Phase 7: 删除旧代理模块
+
+**Files:**
+- Delete: `plugins/page-pilot-skill/scripts/lib/goal-orchestrator.js`
+- Delete: `plugins/page-pilot-skill/scripts/lib/goal-planner.js`
+- Delete: `plugins/page-pilot-skill/scripts/lib/strategy-report.js`
+- Delete: `plugins/page-pilot-skill/scripts/lib/strategy-state.js`
+- Delete: `plugins/page-pilot-skill/scripts/lib/site-intelligence-store.js`
+- Delete: `plugins/page-pilot-skill/scripts/lib/workflow-intelligence.js`
+- Modify: `plugins/page-pilot-skill/scripts/mcp-server.js`
+- Modify: `plugins/page-pilot-skill/tests/**`
+
+**Deliverables:**
+- 删除清单
+- 删除后工具面说明
+- 删除后测试更新清单
+
+- [x] 从代码中直接删除旧代理模块
+- [x] 删除相关 MCP 工具入口
+- [x] 删除或重写依赖这些模块的测试
+- [x] 确保主线代码不再引用旧代理模块
+
+## Phase 8: 把 benchmark 改成代码质量基准
+
+**Files:**
+- Modify: `plugins/page-pilot-skill/benchmarks/README.md`
+- Modify: `plugins/page-pilot-skill/benchmarks/lib/coverage-matrix.js`
+- Modify: `plugins/page-pilot-skill/benchmarks/lib/report-writer.js`
+- Modify: `plugins/page-pilot-skill/benchmarks/registry/sites.js`
+- Modify or Create as needed under: `plugins/page-pilot-skill/benchmarks/scenarios/`
+
+**Deliverables:**
+- benchmark metric schema
+- benchmark report schema
+- code quality gate definition
+- external site unavailable policy
+
+- [x] 将 benchmark 指标改为语义 locator 占比、CSS fallback 占比、唯一命中率、已验证计划首次通过率、生成计划验证通过率、修复后通过率、代码长度
+- [x] 删除以“agent 完成长流程任务”为主的成功标准
+- [x] 为每个真实站点场景增加 codegen 质量断言
+- [x] 在失败路径也落盘 code-quality 与 generated-code 证据
+- [x] 将外部站点不可用显式标记为 `EXTERNAL_SITE_UNAVAILABLE`，并从验收与 code-quality 分母中剔除
+- [x] 让 benchmark 报告能直接说明代码质量是否提升
 
 ## Acceptance Criteria
 
-- [ ] 项目公开定位已收口为“语义辅助式 Playwright 代码生成工具”
-- [ ] `scan / analyze` 输出模型覆盖 accessibility / DOM / layout / text 语义
-- [ ] locator 排序显著偏向语义化 Playwright locator
-- [ ] 生成后验证 / 修复能力可用
-- [ ] benchmark 明确衡量代码生成质量而非代理任务完成率
-- [ ] 非核心代理能力被降级或冻结，不再继续占据主线优先级
+- [x] 文档、skill、agent 配置、MCP 描述全部只讲代码生成辅助闭环
+- [x] MCP 工具面只保留主工具，不再保留旧 agent 工具
+- [x] `browser_scan` 已升级为明确的语义对象模型
+- [x] locator ranking 已明确以 Playwright 语义 locator 为中心
+- [x] 任意脚本执行已被 `browser_probe` 替代
+- [x] codegen 已基于语义候选和验证结果生成
+- [x] 验证与修复工具可在真实页面上闭环工作
+- [x] benchmark 已改成代码质量基准

@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -92,17 +92,17 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the visibility playground page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Record the initial button visibility state',
           readVisibilityStateScript,
           (data) => ({ hiddenCount: data.hiddenCount })
         );
-        await runActions(context, sessionId, 'Click Hide to change button visibility states', [
+        await validatePlaywright(context, sessionId, 'Click Hide to change button visibility states', [
           { type: 'click', locator: { strategy: 'css', value: '#hideButton' } },
         ]);
-        const after = await executeScript(
+        const after = await runProbe(
           context,
           sessionId,
           'Verify that target buttons changed state and the overlap layer covered the button',

@@ -128,9 +128,19 @@ test('browser manager opens a complex page and structured scan returns v2 summar
     assert.equal(full.interactives.inputs[0].locators.some((candidate) => candidate.strategy === 'label'), true);
     assert.equal(
       full.interactives.buttons.find((entry) => entry.testId === 'primary-action').preferredLocator.strategy,
-      'testId'
+      'role'
     );
     assert.equal(full.hints.primaryAction.label, 'Confirm send');
+
+    const emailField = full.interactives.inputs.find((entry) => entry.css === '#email');
+    assert.equal(emailField.accessibleName, 'Email');
+    assert.equal(emailField.visibleText, 'Email');
+    assert.equal(emailField.localContext.form?.name, 'support-form');
+    assert.equal(emailField.actionability.actionable, true);
+    assert.equal(emailField.geometry.width > 0, true);
+    assert.equal(emailField.recommendedLocators[0].locator.strategy, 'role');
+    assert.equal(emailField.stableFingerprint.role, 'textbox');
+    assert.equal(emailField.confidence.level, 'high');
 
     const actions = await runActions(session.page, [
       { type: 'fill', locator: { strategy: 'label', value: 'Email' }, value: 'qa@example.com' },
@@ -209,6 +219,72 @@ test('structured scan keeps workflow buttons and links when chrome fills the ear
   } finally {
     await manager.closeAll();
     await fixtureServer.close();
+  }
+});
+
+test('structured scan infers input submit names and table-row field labels for semantic locators', async () => {
+  const inlineServer = await startInlineHtmlServer(
+    {
+      '/semantic-fields': `
+        <!doctype html>
+        <html lang="en">
+          <body>
+            <main>
+              <form id="customerForm">
+                <table>
+                  <tr>
+                    <td>First Name:</td>
+                    <td><input id="customer.firstName" name="customer.firstName" type="text" /></td>
+                  </tr>
+                  <tr>
+                    <td>Last Name:</td>
+                    <td><input id="customer.lastName" name="customer.lastName" type="text" /></td>
+                  </tr>
+                  <tr>
+                    <td colspan="2">
+                      <input type="submit" value="Register" />
+                    </td>
+                  </tr>
+                </table>
+              </form>
+            </main>
+          </body>
+        </html>
+      `,
+    },
+    '/semantic-fields'
+  );
+  const manager = new BrowserManager({
+    artifactRoot: '/data/work/AgentBrowser/artifacts/page-pilot-skill',
+    idleMs: 30000,
+  });
+
+  try {
+    const session = await manager.openSession({ url: inlineServer.url });
+    const scan = await collectStructuredPageData(session.page, { detailLevel: 'full' });
+    const firstName = scan.interactives.inputs.find((entry) => entry.css === '#customer\\.firstName');
+    const submit = scan.interactives.buttons.find((entry) => entry.visibleText === 'Register');
+
+    assert.equal(firstName?.accessibleName, 'First Name:');
+    assert.equal(firstName?.localContext.form?.name, 'customerForm');
+    assert.equal(firstName?.preferredLocator?.strategy, 'role');
+    assert.deepEqual(firstName?.preferredLocator?.value, {
+      role: 'textbox',
+      name: 'First Name:',
+      exact: true,
+    });
+
+    assert.equal(submit?.accessibleName, 'Register');
+    assert.equal(submit?.visibleText, 'Register');
+    assert.equal(submit?.preferredLocator?.strategy, 'role');
+    assert.deepEqual(submit?.preferredLocator?.value, {
+      role: 'button',
+      name: 'Register',
+      exact: true,
+    });
+  } finally {
+    await manager.closeAll();
+    await inlineServer.close();
   }
 });
 
@@ -414,7 +490,7 @@ test('structured scan uses the workflow link as primaryAction when buttons are o
     assert.equal(standard.hints.primaryAction?.label, 'Resume plan');
     assert.deepEqual(standard.hints.primaryAction?.locator, {
       strategy: 'role',
-      value: { role: 'link', name: 'Resume plan' },
+      value: { role: 'link', name: 'Resume plan', exact: true },
     });
   } finally {
     await manager.closeAll();

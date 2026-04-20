@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -20,23 +20,27 @@ const challengeRows = [
   ['Lara', 'Palmer', 'Timepath Inc.', 'Programmer', '87 Orange Street', 'lpalmer@timepath.co.uk', '40731653845'],
 ];
 
-const runChallengeScript = `
-  const rows = ${JSON.stringify(challengeRows)}.map((row) => ({
-    'First Name': row[0],
-    'Last Name': row[1],
-    'Company Name': row[2],
-    'Role in Company': row[3],
-    Address: row[4],
-    Email: row[5],
-    'Phone Number': row[6],
-  }));
+const challengeRowMaps = challengeRows.map((row) => ({
+  'First Name': row[0],
+  'Last Name': row[1],
+  'Company Name': row[2],
+  'Role in Company': row[3],
+  Address: row[4],
+  Email: row[5],
+  'Phone Number': row[6],
+}));
 
+const readChallengeStateScript = `
   function normalizeLabel(label) {
     return String(label || '').replace(/\\s+/g, ' ').trim();
   }
 
-  function currentSignature() {
-    return [...document.querySelectorAll('label')].map((label) => normalizeLabel(label.textContent)).join('|');
+  function escapeAttribute(value) {
+    return String(value || '').replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\\\"');
+  }
+
+  function escapeId(value) {
+    return String(value || '').replace(/([ !"#$%&'()*+,./:;<=>?@[\\\\\\]^\\\`{|}~])/g, '\\\\\\\\$1');
   }
 
   function currentRound() {
@@ -45,94 +49,129 @@ const runChallengeScript = `
   }
 
   function currentFields() {
-    return [...document.querySelectorAll('input[ng-reflect-name]')].map((input) => {
-      const label =
-        input.closest('.input-field')?.querySelector('label') ||
-        input.parentElement?.querySelector('label') ||
-        input.closest('div')?.querySelector('label');
-      return {
-        input,
-        label: normalizeLabel(label?.textContent),
-      };
-    });
-  }
+    return [...document.querySelectorAll('input[ng-reflect-name], .input-field input, form input')]
+      .filter((input) => input.type !== 'submit' && input.type !== 'hidden')
+      .map((input) => {
+        const label =
+          input.closest('.input-field')?.querySelector('label') ||
+          input.parentElement?.querySelector('label') ||
+          input.closest('div')?.querySelector('label');
+        const text = normalizeLabel(label?.textContent);
+        if (!text) {
+          return null;
+        }
 
-  function setFieldValue(input, value) {
-    input.focus();
-    input.value = value;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
+        const reflectedName = input.getAttribute('ng-reflect-name');
+        const byReflectedName = reflectedName ? 'input[ng-reflect-name="' + escapeAttribute(reflectedName) + '"]' : null;
+        const name = input.getAttribute('name');
+        const byName = name ? 'input[name="' + escapeAttribute(name) + '"]' : null;
+        const id = input.id ? '#' + escapeId(input.id) : null;
 
-  const submitButton =
-    document.querySelector('input[type="submit"]') ||
-    [...document.querySelectorAll('button')].find((button) => normalizeLabel(button.textContent) === 'Submit');
-  if (!submitButton) {
-    throw new Error('Submit control is missing from the RPA Challenge form.');
-  }
-
-  let previousSignature = currentSignature();
-  let previousRound = currentRound();
-  const completedRows = [];
-  for (const row of rows) {
-    const fieldDeadline = Date.now() + 5000;
-    while (Date.now() < fieldDeadline && currentFields().length < 7) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    const fields = currentFields();
-    if (fields.length < 7) {
-      throw new Error(\`Expected seven mapped inputs, found \${fields.length}.\`);
-    }
-    for (const field of fields) {
-      const value = row[field.label];
-      if (value === undefined) {
-        throw new Error(\`Unmapped challenge label: \${field.label}\`);
-      }
-      setFieldValue(field.input, value);
-    }
-    submitButton.click();
-
-    const deadline = Date.now() + 10000;
-    while (Date.now() < deadline) {
-      const body = document.body.textContent.replace(/\\s+/g, ' ').trim();
-      if (/congratulations!/i.test(body)) {
-        completedRows.push(row['First Name']);
         return {
-          attemptedRows: rows.length,
-          completedRows,
-          successText: body,
+          label: text,
+          selector: byReflectedName || byName || id,
         };
-      }
-
-      const nextRound = currentRound();
-      if (previousRound !== null && nextRound !== null && nextRound > previousRound) {
-        completedRows.push(row['First Name']);
-        previousRound = nextRound;
-        previousSignature = currentSignature();
-        break;
-      }
-
-      const nextSignature = currentSignature();
-      if ((previousRound === null || nextRound === null) && nextSignature && nextSignature !== previousSignature) {
-        completedRows.push(row['First Name']);
-        previousSignature = nextSignature;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+      })
+      .filter(Boolean);
   }
 
-  const finalBody = document.body.textContent.replace(/\\s+/g, ' ').trim();
-  if (!/congratulations!/i.test(finalBody)) {
-    throw new Error('Challenge rows were submitted, but the success state never appeared.');
-  }
-
+  const fields = currentFields();
   return {
-    attemptedRows: rows.length,
-    completedRows,
-    successText: finalBody,
+    round: currentRound(),
+    signature: fields.map((field) => field.label).join('|'),
+    successText: document.body.textContent.replace(/\\s+/g, ' ').trim(),
+    fields,
   };
 `;
+
+async function readChallengeState(context, sessionId, title = 'Read the current RPA Challenge form state') {
+  const response = await runProbe(
+    context,
+    sessionId,
+    title,
+    readChallengeStateScript,
+    (data) => ({
+      round: data.round,
+      fieldCount: Array.isArray(data.fields) ? data.fields.length : 0,
+      success: /congratulations!/i.test(data.successText ?? ''),
+    })
+  );
+  return response.data;
+}
+
+async function waitForChallengeFields(context, sessionId, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const state = await readChallengeState(context, sessionId);
+    if (Array.isArray(state.fields) && state.fields.length >= 7) {
+      return state;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error('Expected the RPA Challenge page to expose seven mapped inputs.');
+}
+
+async function waitForChallengeAdvance(context, sessionId, previousState, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const state = await readChallengeState(context, sessionId, 'Wait for the challenge round to advance');
+    if (/congratulations!/i.test(state.successText ?? '')) {
+      return { kind: 'success', state };
+    }
+
+    if (
+      Number.isFinite(previousState.round) &&
+      Number.isFinite(state.round) &&
+      state.round > previousState.round
+    ) {
+      return { kind: 'round_advanced', state };
+    }
+
+    if (
+      (previousState.round === null || state.round === null) &&
+      state.signature &&
+      state.signature !== previousState.signature
+    ) {
+      return { kind: 'signature_changed', state };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error('The RPA Challenge page never advanced to the next round.');
+}
+
+function buildRowActions(state, row) {
+  const actions = state.fields.map((field) => {
+    const value = row[field.label];
+    if (value === undefined) {
+      throw new Error(`Unmapped challenge label: ${field.label}`);
+    }
+
+    const action = {
+      type: 'fill',
+      locator: { strategy: 'label', value: field.label },
+      value,
+    };
+
+    if (field.selector) {
+      action.fallbackLocators = [{ strategy: 'css', value: field.selector }];
+    }
+
+    return action;
+  });
+
+  actions.push({
+    type: 'click',
+    locator: { strategy: 'role', value: { role: 'button', name: 'Submit' } },
+    fallbackLocators: [{ strategy: 'css', value: 'input[type="submit"]' }],
+  });
+
+  return actions;
+}
 
 export const scenario = {
   async run(context) {
@@ -140,23 +179,43 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the RPA Challenge page', 'brief');
-        await runActions(context, sessionId, 'Start the dynamic label challenge', [
+        await validatePlaywright(context, sessionId, 'Start the dynamic label challenge', [
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Start' } } },
         ]);
-        const result = await executeScript(
-          context,
-          sessionId,
-          'Fill the challenge rows using dynamic label mapping',
-          runChallengeScript,
-          (data) => ({
-            attemptedRows: data.attemptedRows,
-            completedRows: data.completedRows.length,
-          })
-        );
+
+        const completedRows = [];
+        let currentState = await waitForChallengeFields(context, sessionId);
+
+        for (const row of challengeRowMaps) {
+          await validatePlaywright(
+            context,
+            sessionId,
+            `Fill and submit challenge row for ${row['First Name']}`,
+            buildRowActions(currentState, row)
+          );
+
+          const transition = await waitForChallengeAdvance(context, sessionId, currentState);
+          completedRows.push(row['First Name']);
+          currentState = transition.state;
+
+          if (transition.kind === 'success') {
+            break;
+          }
+        }
+
+        if (!/congratulations!/i.test(currentState.successText ?? '')) {
+          throw new Error('Challenge rows were submitted, but the success state never appeared.');
+        }
+
         addArtifact(await captureScreenshot(context, sessionId, 'rpa-challenge-complete'));
         return {
-          summary: `Completed the RPA Challenge by mapping ${result.data.completedRows.length} reordered form rows.`,
-          details: result.data,
+          summary: `Completed the RPA Challenge by mapping ${completedRows.length} reordered form rows.`,
+          details: {
+            attemptedRows: challengeRowMaps.length,
+            completedRows,
+            successText: currentState.successText,
+            finalRound: currentState.round,
+          },
         };
       },
       { url: 'https://rpachallenge.com/' }

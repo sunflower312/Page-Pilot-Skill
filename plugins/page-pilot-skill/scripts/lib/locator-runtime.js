@@ -2,6 +2,10 @@ function safeErrorMessage(error) {
   return error?.message ?? String(error ?? 'Unknown error');
 }
 
+function normalizeLocatorReference(locator = {}) {
+  return locator?.locator?.strategy ? locator.locator : locator;
+}
+
 function browserRecoverCheckboxToggle(element, desiredChecked) {
   if (!element || typeof element.checked !== 'boolean') {
     return {
@@ -93,31 +97,36 @@ export async function recoverCheckboxToggle(locator, desiredChecked) {
 }
 
 export function resolveLocator(page, locator = {}) {
-  if (locator.strategy === 'label') {
-    return page.getByLabel(locator.value);
+  const locatorRef = normalizeLocatorReference(locator);
+
+  if (locatorRef.strategy === 'label') {
+    return page.getByLabel(locatorRef.value);
   }
 
-  if (locator.strategy === 'role') {
-    return page.getByRole(locator.value.role, { name: locator.value.name });
+  if (locatorRef.strategy === 'role') {
+    return page.getByRole(locatorRef.value.role, {
+      name: locatorRef.value.name,
+      exact: locatorRef.value.exact !== false,
+    });
   }
 
-  if (locator.strategy === 'text') {
-    return page.getByText(locator.value, { exact: true });
+  if (locatorRef.strategy === 'text') {
+    return page.getByText(locatorRef.value, { exact: true });
   }
 
-  if (locator.strategy === 'placeholder') {
-    return page.getByPlaceholder(locator.value);
+  if (locatorRef.strategy === 'placeholder') {
+    return page.getByPlaceholder(locatorRef.value);
   }
 
-  if (locator.strategy === 'testId') {
-    return page.getByTestId(locator.value);
+  if (locatorRef.strategy === 'testId') {
+    return page.getByTestId(locatorRef.value);
   }
 
-  if (locator.strategy === 'css') {
-    return page.locator(locator.value);
+  if (locatorRef.strategy === 'css') {
+    return page.locator(locatorRef.value);
   }
 
-  throw new Error(`Unsupported locator strategy: ${locator.strategy}`);
+  throw new Error(`Unsupported locator strategy: ${locatorRef.strategy}`);
 }
 
 function getRequirements(usage) {
@@ -154,7 +163,8 @@ function extractProbeError(...values) {
 }
 
 export async function verifyLocatorCandidate(page, locatorRef, usage, options = {}) {
-  const locator = resolveLocator(page, locatorRef);
+  const normalizedLocatorRef = normalizeLocatorReference(locatorRef);
+  const locator = resolveLocator(page, normalizedLocatorRef);
   const target = typeof locator.first === 'function' ? locator.first() : locator;
   const requirements = getRequirements(usage);
   const timeoutMs = options.timeoutMs ?? 1200;
@@ -164,7 +174,7 @@ export async function verifyLocatorCandidate(page, locatorRef, usage, options = 
       locator,
       target,
       inspection: {
-        locator: locatorRef,
+        locator: normalizedLocatorRef,
         count: null,
         unique: false,
         actionable: false,
@@ -178,11 +188,33 @@ export async function verifyLocatorCandidate(page, locatorRef, usage, options = 
   const count = typeof rawCount === 'number' ? rawCount : 1;
 
   if (count === 0) {
+    if (
+      normalizedLocatorRef.strategy === 'role' &&
+      normalizedLocatorRef.value?.exact === true &&
+      options.allowRoleExactFallback !== false
+    ) {
+      return verifyLocatorCandidate(
+        page,
+        {
+          ...normalizedLocatorRef,
+          value: {
+            ...normalizedLocatorRef.value,
+            exact: false,
+          },
+        },
+        usage,
+        {
+          ...options,
+          allowRoleExactFallback: false,
+        }
+      );
+    }
+
     return {
       locator,
       target,
       inspection: {
-        locator: locatorRef,
+        locator: normalizedLocatorRef,
         count,
         unique: false,
         actionable: false,
@@ -199,7 +231,7 @@ export async function verifyLocatorCandidate(page, locatorRef, usage, options = 
       locator,
       target,
       inspection: {
-        locator: locatorRef,
+        locator: normalizedLocatorRef,
         count,
         unique: false,
         actionable: false,
@@ -232,7 +264,7 @@ export async function verifyLocatorCandidate(page, locatorRef, usage, options = 
     locator,
     target,
     inspection: {
-      locator: locatorRef,
+      locator: normalizedLocatorRef,
       count,
       unique: true,
       visible,
@@ -256,7 +288,7 @@ export async function resolveActionLocator(page, action = {}, usage, options = {
     inspections.push(result.inspection);
     if (result.inspection.ok) {
       return {
-        selected: locatorRef,
+        selected: result.inspection.locator ?? normalizeLocatorReference(locatorRef),
         locator: result.target,
         candidates: inspections,
       };

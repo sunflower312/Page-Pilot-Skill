@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -38,17 +38,17 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the load-more catalogue page', 'brief');
-        const before = await executeScript(
+        const before = await runProbe(
           context,
           sessionId,
           'Measure the initial catalog size before clicking More',
           readCatalogCountScript,
           (data) => ({ count: data.count })
         );
-        await runActions(context, sessionId, 'Click the More link to reveal additional products', [
+        await validatePlaywright(context, sessionId, 'Click the More link to reveal additional products', [
           { type: 'click', locator: { strategy: 'css', value: '.ecomerce-items-scroll-more' } },
         ]);
-        const measurement = await executeScript(
+        const measurement = await runProbe(
           context,
           sessionId,
           'Verify that the visible catalog grew after clicking More',

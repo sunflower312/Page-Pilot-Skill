@@ -1,7 +1,7 @@
 import {
   captureScreenshot,
-  executeScript,
-  runActions,
+  runProbe,
+  validatePlaywright,
   scanPage,
 } from '../_shared/scenario-tools.js';
 
@@ -50,7 +50,7 @@ async function openReadySession(context, attempts = 3, delayMs = 1000) {
       title: session.title ?? null,
     });
 
-    const probe = await executeScript(
+    const probe = await runProbe(
       context,
       session.sessionId,
       `Probe login-page readiness (attempt ${attempt})`,
@@ -83,7 +83,7 @@ export const scenario = {
 
     try {
       await scanPage(context, sessionInfo.sessionId, 'Scan the login page', 'brief');
-      await runActions(context, sessionInfo.sessionId, 'Submit the demo credentials', [
+      await validatePlaywright(context, sessionInfo.sessionId, 'Submit the demo credentials', [
         {
           type: 'fill',
           locator: { strategy: 'css', value: '#username' },
@@ -105,7 +105,7 @@ export const scenario = {
         { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Login' } } },
         { type: 'assert_url', value: '/secure' },
       ]);
-      const verification = await executeScript(
+      const verification = await runProbe(
         context,
         sessionInfo.sessionId,
         'Verify the secure-area flash and logout link',

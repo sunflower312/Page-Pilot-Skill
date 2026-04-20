@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -31,13 +31,13 @@ export const scenario = {
   async run(context) {
     const sessionRun = await withScenarioSession(context, async ({ sessionId, addArtifact }) => {
       await scanPage(context, sessionId, 'Scan the practice login page', 'brief');
-      await runActions(context, sessionId, 'Submit the practice credentials', [
+      await validatePlaywright(context, sessionId, 'Submit the practice credentials', [
         { type: 'fill', locator: { strategy: 'label', value: 'Username' }, value: 'practice' },
         { type: 'fill', locator: { strategy: 'label', value: 'Password' }, value: 'SuperSecretPassword!' },
         { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Login' } } },
         { type: 'assert_url', value: '/secure' },
       ]);
-      const verification = await executeScript(
+      const verification = await runProbe(
         context,
         sessionId,
         'Verify the secure page state',

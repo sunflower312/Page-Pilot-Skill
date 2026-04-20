@@ -1,8 +1,8 @@
 import {
   captureScreenshot,
-  executeScript,
+  runProbe,
   finalizeScenario,
-  runActions,
+  validatePlaywright,
   scanPage,
   withScenarioSession,
 } from '../_shared/scenario-tools.js';
@@ -33,12 +33,12 @@ export const scenario = {
       context,
       async ({ sessionId, addArtifact }) => {
         await scanPage(context, sessionId, 'Scan the quotes login page', 'brief');
-        await runActions(context, sessionId, 'Authenticate with the demo quotes account', [
+        await validatePlaywright(context, sessionId, 'Authenticate with the demo quotes account', [
           { type: 'fill', locator: { strategy: 'css', value: '#username' }, value: 'admin' },
           { type: 'fill', locator: { strategy: 'css', value: '#password' }, value: 'admin' },
           { type: 'click', locator: { strategy: 'role', value: { role: 'button', name: 'Login' } } },
         ]);
-        const verification = await executeScript(
+        const verification = await runProbe(
           context,
           sessionId,
           'Verify the authenticated quotes homepage state',

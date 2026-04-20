@@ -70,23 +70,22 @@ test('mcp server lists browser tools over stdio', async () => {
     assert.deepEqual(toolNames, [
       'browser_capture_screenshot',
       'browser_close',
-      'browser_execute_js',
-      'browser_explore_goal',
       'browser_generate_playwright',
       'browser_open',
-      'browser_run_actions',
-      'browser_save_storage_state',
+      'browser_probe',
+      'browser_rank_locators',
+      'browser_repair_playwright',
       'browser_scan',
-      'browser_site_profile',
       'browser_snapshot_dom',
-      'browser_strategy_report',
+      'browser_validate_playwright',
+      'browser_validate_playwright_code',
     ]);
   } finally {
     await client.close();
   }
 });
 
-test('mcp browser_execute_js recovers when navigation destroys the execution context after the script already triggered a transition', async () => {
+test('mcp browser_probe returns bounded template snapshots', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -103,30 +102,42 @@ test('mcp browser_execute_js recovers when navigation destroys the execution con
     });
     const sessionId = openResult.structuredContent.sessionId;
 
-    const jsResult = await client.callTool({
-      name: 'browser_execute_js',
+    const documentProbe = await client.callTool({
+      name: 'browser_probe',
       arguments: {
         sessionId,
-        script: `
-          window.location.assign('/next-page.html');
-          await new Promise(() => {});
-        `,
+        probe: {
+          template: 'document_snapshot',
+          timeoutMs: 1000,
+        },
       },
     });
 
-    assert.equal(jsResult.structuredContent.ok, true);
-    assert.equal(jsResult.structuredContent.data, null);
-    assert.equal(jsResult.structuredContent.observation.urlChanged, true);
-    assert.equal(jsResult.structuredContent.observation.documentChanged, true);
-    assert.equal(jsResult.structuredContent.observation.titleChanged, true);
-    assert.equal(jsResult.structuredContent.observation.newText.includes('Navigation success.'), true);
+    assert.equal(documentProbe.structuredContent.ok, true);
+    assert.equal(documentProbe.structuredContent.template, 'document_snapshot');
+    assert.equal(documentProbe.structuredContent.data.title, 'Agent Browser Fixture');
+    assert.match(documentProbe.structuredContent.data.url, /\/structured-page\.html$/);
+    assert.match(documentProbe.structuredContent.data.text, /Waiting for submit/);
 
-    const scanResult = await client.callTool({
-      name: 'browser_scan',
-      arguments: { sessionId, detailLevel: 'brief' },
+    const selectorProbe = await client.callTool({
+      name: 'browser_probe',
+      arguments: {
+        sessionId,
+        probe: {
+          template: 'selector_snapshot',
+          selector: '#message',
+          includeGeometry: true,
+          timeoutMs: 1000,
+        },
+      },
     });
-    assert.match(scanResult.structuredContent.url, /\/next-page\.html$/);
-    assert.match(scanResult.structuredContent.title, /Second Fixture Page/);
+
+    assert.equal(selectorProbe.structuredContent.ok, true);
+    assert.equal(selectorProbe.structuredContent.template, 'selector_snapshot');
+    assert.equal(selectorProbe.structuredContent.data.count, 1);
+    assert.equal(selectorProbe.structuredContent.data.elements[0].id, 'message');
+    assert.equal(selectorProbe.structuredContent.data.elements[0].text, 'Waiting for submit');
+    assert.equal(selectorProbe.structuredContent.data.elements[0].geometry.width > 0, true);
 
     await client.callTool({
       name: 'browser_close',
@@ -138,7 +149,7 @@ test('mcp browser_execute_js recovers when navigation destroys the execution con
   }
 });
 
-test('mcp browser_execute_js still reports genuine script errors as failures', async () => {
+test('mcp browser_probe still reports genuine probe failures', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -155,19 +166,21 @@ test('mcp browser_execute_js still reports genuine script errors as failures', a
     });
     const sessionId = openResult.structuredContent.sessionId;
 
-    const jsResult = await client.callTool({
-      name: 'browser_execute_js',
+    const probeResult = await client.callTool({
+      name: 'browser_probe',
       arguments: {
         sessionId,
-        script: `
-          throw new Error('Script exploded');
-        `,
+        probe: {
+          template: 'selector_snapshot',
+          selector: '???',
+          timeoutMs: 1000,
+        },
       },
     });
 
-    assert.equal(jsResult.structuredContent.ok, false);
-    assert.equal(jsResult.structuredContent.error.code, 'BROWSER_EXECUTE_JS_FAILED');
-    assert.match(jsResult.structuredContent.error.message, /Script exploded/);
+    assert.equal(probeResult.structuredContent.ok, false);
+    assert.equal(probeResult.structuredContent.error.code, 'BROWSER_PROBE_FAILED');
+    assert.match(probeResult.structuredContent.error.message, /not a valid selector|selector/i);
 
     await client.callTool({
       name: 'browser_close',
@@ -179,7 +192,7 @@ test('mcp browser_execute_js still reports genuine script errors as failures', a
   }
 });
 
-test('mcp browser_execute_js fails when a navigation-looking context-loss error occurs without a main-document switch', async () => {
+test('mcp browser_probe rejects internal-only templates from the public contract', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -196,30 +209,30 @@ test('mcp browser_execute_js fails when a navigation-looking context-loss error 
     });
     const sessionId = openResult.structuredContent.sessionId;
 
-    const jsResult = await client.callTool({
-      name: 'browser_execute_js',
+    const probeResult = await client.callTool({
+      name: 'browser_probe',
       arguments: {
         sessionId,
-        script: `
-          document.title = 'Transient title only';
-          const banner = document.createElement('p');
-          banner.textContent = 'Title-only mutation';
-          document.body.appendChild(banner);
-          throw new Error('Execution context was destroyed, most likely because of a navigation');
-        `,
+        probe: {
+          template: 'readonly_script',
+          source: `return document.title;`,
+          timeoutMs: 1000,
+        },
       },
     });
 
-    assert.equal(jsResult.structuredContent.ok, false);
-    assert.equal(jsResult.structuredContent.error.code, 'BROWSER_EXECUTE_JS_FAILED');
-    assert.match(jsResult.structuredContent.error.message, /Execution context was destroyed, most likely because of a navigation/);
+    assert.equal(probeResult.isError, true);
+    assert.match(
+      probeResult.content.find((entry) => entry.type === 'text')?.text ?? '',
+      /invalid arguments|invalid input|readonly_script|template/i
+    );
 
     const scanResult = await client.callTool({
       name: 'browser_scan',
       arguments: { sessionId, detailLevel: 'brief' },
     });
     assert.match(scanResult.structuredContent.url, /\/structured-page\.html$/);
-    assert.match(scanResult.structuredContent.title, /Transient title only/);
+    assert.match(scanResult.structuredContent.title, /Agent Browser Fixture/);
 
     await client.callTool({
       name: 'browser_close',
@@ -231,7 +244,7 @@ test('mcp browser_execute_js fails when a navigation-looking context-loss error 
   }
 });
 
-test('mcp browser_execute_js does not recover frame detached errors even if the page title changes', async () => {
+test('mcp browser_validate_playwright_code executes generated snippets directly', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -248,69 +261,21 @@ test('mcp browser_execute_js does not recover frame detached errors even if the 
     });
     const sessionId = openResult.structuredContent.sessionId;
 
-    const jsResult = await client.callTool({
-      name: 'browser_execute_js',
+    const result = await client.callTool({
+      name: 'browser_validate_playwright_code',
       arguments: {
         sessionId,
-        script: `
-          document.title = 'Frame detached title';
-          throw new Error('Frame was detached');
-        `,
+        code: [
+          `const email = page.getByRole('textbox', { name: 'Email' });`,
+          `await email.fill('qa@example.com');`,
+          `await page.getByRole('button', { name: 'Submit' }).click();`,
+          `await expect.poll(async () => page.locator('#message').textContent()).toContain('qa@example.com');`,
+        ].join('\n'),
       },
     });
 
-    assert.equal(jsResult.structuredContent.ok, false);
-    assert.equal(jsResult.structuredContent.error.code, 'BROWSER_EXECUTE_JS_FAILED');
-    assert.match(jsResult.structuredContent.error.message, /Frame was detached/);
-
-    await client.callTool({
-      name: 'browser_close',
-      arguments: { sessionId },
-    });
-  } finally {
-    await client.close();
-    await fixtureServer.close();
-  }
-});
-
-test('mcp browser_execute_js does not recover missing-context errors even if the page DOM changes', async () => {
-  const fixtureServer = await startFixtureServer();
-  const { client, transport } = createClient();
-
-  try {
-    await client.connect(transport);
-
-    const openResult = await client.callTool({
-      name: 'browser_open',
-      arguments: {
-        url: fixtureServer.url,
-        waitUntil: 'domcontentloaded',
-        timeoutMs: 5000,
-      },
-    });
-    const sessionId = openResult.structuredContent.sessionId;
-
-    const jsResult = await client.callTool({
-      name: 'browser_execute_js',
-      arguments: {
-        sessionId,
-        script: `
-          const banner = document.createElement('p');
-          banner.textContent = 'Context missing banner';
-          document.body.appendChild(banner);
-          throw new Error('Cannot find context with specified id');
-        `,
-      },
-    });
-
-    assert.equal(jsResult.structuredContent.ok, false);
-    assert.equal(jsResult.structuredContent.error.code, 'BROWSER_EXECUTE_JS_FAILED');
-    assert.match(jsResult.structuredContent.error.message, /Cannot find context with specified id/);
-
-    await client.callTool({
-      name: 'browser_close',
-      arguments: { sessionId },
-    });
+    assert.equal(result.structuredContent.ok, true);
+    assert.match(result.structuredContent.finalUrl, /structured-page\.html$/);
   } finally {
     await client.close();
     await fixtureServer.close();
@@ -347,64 +312,62 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
       'role'
     );
 
-    const initialStrategyResult = await client.callTool({
-      name: 'browser_strategy_report',
+    const rankingResult = await client.callTool({
+      name: 'browser_rank_locators',
       arguments: {
         sessionId,
-        goal: '填写表单，提交，然后验证页面反馈',
+        target: {
+          role: 'textbox',
+          accessibleName: 'Email',
+        },
       },
     });
-    assert.equal(initialStrategyResult.structuredContent.ok, true);
-    assert.equal(initialStrategyResult.structuredContent.state.pageType, 'form');
-    assert.equal(
-      initialStrategyResult.structuredContent.taskPlan.some((phase) => phase.id === 'complete_primary_work'),
-      true
-    );
-    assert.equal(initialStrategyResult.structuredContent.nextActions.length > 0, true);
+    assert.equal(rankingResult.structuredContent.ok, true);
+    assert.equal(rankingResult.structuredContent.matches[0].preferredLocator.strategy, 'role');
+    assert.equal(rankingResult.structuredContent.matches[0].element.accessibleName, 'Email');
+    assert.equal(rankingResult.structuredContent.matches[0].matchCount, 1);
+    assert.match(rankingResult.structuredContent.matches[0].playwrightExpression, /page\.getByRole/);
 
-    const jsResult = await client.callTool({
-      name: 'browser_execute_js',
+    const probeResult = await client.callTool({
+      name: 'browser_probe',
       arguments: {
         sessionId,
-        script: `
-          document.title = 'Agent Browser Fixture Updated';
-          const banner = document.createElement('p');
-          banner.textContent = 'Transient success banner';
-          document.body.appendChild(banner);
-          history.replaceState({}, '', '/structured-page.html?changed=1');
-          return { title: document.title, banner: banner.textContent };
-        `,
+        probe: {
+          template: 'document_snapshot',
+          timeoutMs: 1000,
+        },
       },
     });
-    assert.equal(jsResult.structuredContent.data.title, 'Agent Browser Fixture Updated');
-    assert.equal(jsResult.structuredContent.observation.urlChanged, true);
-    assert.equal(jsResult.structuredContent.observation.titleChanged, true);
-    assert.equal(jsResult.structuredContent.observation.newText.includes('Transient success banner'), true);
+    assert.equal(probeResult.structuredContent.ok, true);
+    assert.equal(probeResult.structuredContent.data.title, 'Agent Browser Fixture');
+    assert.match(probeResult.structuredContent.data.text, /Waiting for submit/);
 
-    const serializedJsResult = await client.callTool({
-      name: 'browser_execute_js',
+    const serializedProbeResult = await client.callTool({
+      name: 'browser_probe',
       arguments: {
         sessionId,
-        script: `
-          const element = document.querySelector('#message');
-          const payload = { element };
-          payload.self = payload;
-          return payload;
-        `,
+        probe: {
+          template: 'selector_snapshot',
+          selector: '#message',
+          timeoutMs: 1000,
+        },
       },
     });
-    assert.equal(serializedJsResult.structuredContent.ok, true);
-    assert.equal(serializedJsResult.structuredContent.data.element.$type, 'element');
-    assert.equal(serializedJsResult.structuredContent.data.element.id, 'message');
-    assert.equal(serializedJsResult.structuredContent.data.self.$type, 'circular');
+    assert.equal(serializedProbeResult.structuredContent.ok, true);
+    assert.equal(serializedProbeResult.structuredContent.data.count, 1);
+    assert.equal(serializedProbeResult.structuredContent.data.elements[0].id, 'message');
 
     const actionsResult = await client.callTool({
-      name: 'browser_run_actions',
+      name: 'browser_validate_playwright',
       arguments: {
         sessionId,
-        actions: [
+        steps: [
           { type: 'fill', locator: { strategy: 'placeholder', value: 'email@example.com' }, value: 'qa@example.com' },
-          { type: 'click', locator: { strategy: 'text', value: 'Submit' } },
+          {
+            type: 'click',
+            locator: { strategy: 'text', value: 'Submit' },
+            expectedStateChange: { kind: 'dom_change', textIncludes: 'Thanks qa@example.com' },
+          },
           { type: 'wait_for', value: 50 },
           { type: 'capture', locator: { strategy: 'css', value: '#message' } },
           { type: 'assert_text', locator: { strategy: 'css', value: '#message' }, value: 'Thanks qa@example.com' },
@@ -416,27 +379,17 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     await access(actionsResult.structuredContent.steps[3].path);
     const captureSize = await readPngSize(actionsResult.structuredContent.steps[3].path);
     assert.equal(captureSize.height < 200, true);
-    assert.equal(actionsResult.structuredContent.steps[0].locator.strategy, 'placeholder');
+    assert.equal(actionsResult.structuredContent.steps[0].locatorChoice.strategy, 'role');
+    assert.equal(actionsResult.structuredContent.steps[0].locatorRanking[0].preferredLocator.strategy, 'role');
     assert.equal(actionsResult.structuredContent.steps[0].verification.candidates[0].usable, true);
     assert.equal(actionsResult.structuredContent.steps[1].stability.settled, true);
     assert.equal(actionsResult.structuredContent.steps[1].stability.trigger !== 'url_change', true);
     assert.equal(actionsResult.structuredContent.observation.newText.includes('Thanks qa@example.com'), true);
-
-    const learnedStrategyResult = await client.callTool({
-      name: 'browser_strategy_report',
-      arguments: {
-        sessionId,
-        goal: '继续总结站点操作流程，并给出稳定的后续建议',
-      },
-    });
-    assert.equal(learnedStrategyResult.structuredContent.ok, true);
-    assert.equal(learnedStrategyResult.structuredContent.learnedExperience.knownStateCount >= 1, true);
-    assert.equal(learnedStrategyResult.structuredContent.learnedExperience.stableLocators.length > 0, true);
-    assert.equal(learnedStrategyResult.structuredContent.workflowSummary.phases.length > 0, true);
-    assert.equal(
-      learnedStrategyResult.structuredContent.workflowSummary.phases.some((phase) => phase.id === 'complete_form'),
-      true
-    );
+    assert.equal(actionsResult.structuredContent.stateChanged, true);
+    assert.equal(actionsResult.structuredContent.assertionsPassed, true);
+    assert.equal(actionsResult.structuredContent.failureKind, null);
+    assert.equal(actionsResult.structuredContent.evidence.steps[1].expectedStateChange.kind, 'dom_change');
+    assert.equal(actionsResult.structuredContent.validation.metrics.semanticLocatorRatio >= 0.5, true);
 
     const generatedCodeResult = await client.callTool({
       name: 'browser_generate_playwright',
@@ -447,20 +400,83 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     assert.match(generatedCodeResult.structuredContent.code, /page\.goto\(/);
     assert.match(
       generatedCodeResult.structuredContent.code,
-      /await[\s\S]{0,200}?\.(?:fill|type|pressSequentially)\((?:'|")qa@example\.com(?:'|")\)/
+      /await[\s\S]{0,200}?\.(?:fill|type|pressSequentially)\('qa@example\.com'\)/
     );
     assert.match(generatedCodeResult.structuredContent.code, /await[\s\S]{0,200}?(?:'|")Submit(?:'|")[\s\S]{0,120}?\.click\(\)/);
-    assert.match(generatedCodeResult.structuredContent.code, /disabledCount:/);
-    assert.match(generatedCodeResult.structuredContent.code, /expect\(page\)\.toHaveURL/);
+    assert.match(generatedCodeResult.structuredContent.code, /expect\.poll\(async \(\) => page\.url\(\)\)\.toContain/);
+    assert.equal(generatedCodeResult.structuredContent.source.generatedFrom, 'validated_playwright_evidence');
+    assert.equal(generatedCodeResult.structuredContent.locatorChoices[0].locator.strategy, 'role');
+    assert.ok(Array.isArray(generatedCodeResult.structuredContent.generatedPlan));
+    assert.equal(generatedCodeResult.structuredContent.expectedStateChanges[0].kind, 'dom_change');
 
     const failedActionsResult = await client.callTool({
-      name: 'browser_run_actions',
+      name: 'browser_validate_playwright',
       arguments: {
         sessionId,
-        actions: [{ type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } }],
+        steps: [{ type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } }],
       },
     });
     assert.equal(failedActionsResult.structuredContent.ok, false);
+
+    const expectedStateFailure = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId,
+        steps: [
+          {
+            type: 'click',
+            locator: { strategy: 'text', value: 'Submit' },
+            expectedStateChange: { kind: 'url_change' },
+          },
+        ],
+      },
+    });
+    assert.equal(expectedStateFailure.structuredContent.ok, false);
+    assert.equal(expectedStateFailure.structuredContent.failureKind, 'EXPECTED_STATE_CHANGE_NOT_OBSERVED');
+    assert.equal(expectedStateFailure.structuredContent.stateChanged, false);
+
+    const expectedStateRepair = await client.callTool({
+      name: 'browser_repair_playwright',
+      arguments: {
+        sessionId,
+        steps: [
+          {
+            type: 'click',
+            locator: { strategy: 'text', value: 'Submit' },
+            expectedStateChange: { kind: 'url_change' },
+          },
+        ],
+      },
+    });
+    assert.equal(expectedStateRepair.structuredContent.ok, false);
+    assert.equal(expectedStateRepair.structuredContent.repairAttempted, false);
+
+    const failedAssertionResult = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId,
+        steps: [
+          { type: 'assert_text', locator: { strategy: 'css', value: '#message' }, value: 'This text does not exist' },
+        ],
+      },
+    });
+    assert.equal(failedAssertionResult.structuredContent.ok, false);
+    assert.equal(failedAssertionResult.structuredContent.assertionsPassed, false);
+    assert.equal(failedAssertionResult.structuredContent.evidence.steps[0].assertionPassed, false);
+
+    const repairedActionsResult = await client.callTool({
+      name: 'browser_repair_playwright',
+      arguments: {
+        sessionId,
+        steps: [{ type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } }],
+      },
+    });
+    assert.equal(repairedActionsResult.structuredContent.ok, true);
+    assert.equal(repairedActionsResult.structuredContent.repairAttempted, true);
+    assert.equal(repairedActionsResult.structuredContent.revalidated, true);
+    assert.equal(repairedActionsResult.structuredContent.validation.repaired, true);
+    assert.equal(repairedActionsResult.structuredContent.repairStrategy, 'locator_reordered');
+    assert.match(repairedActionsResult.structuredContent.repairedCode, /Submit/);
 
     const preservedCodeResult = await client.callTool({
       name: 'browser_generate_playwright',
@@ -481,50 +497,11 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     });
     await access(domResult.structuredContent.path);
 
-    const storageResult = await client.callTool({
-      name: 'browser_save_storage_state',
-      arguments: { sessionId },
-    });
-    await access(storageResult.structuredContent.path);
-
-    await client.callTool({
-      name: 'browser_execute_js',
-      arguments: {
-        sessionId,
-        script: `
-          localStorage.setItem('restored-key', 'restored-value');
-          return localStorage.getItem('restored-key');
-        `,
-      },
-    });
-
-    const refreshedStorageResult = await client.callTool({
-      name: 'browser_save_storage_state',
-      arguments: { sessionId },
-    });
-    await access(refreshedStorageResult.structuredContent.path);
-
     const closeResult = await client.callTool({
       name: 'browser_close',
       arguments: { sessionId },
     });
     assert.equal(closeResult.structuredContent.ok, true);
-
-    const reopenedResult = await client.callTool({
-      name: 'browser_open',
-      arguments: {
-        url: fixtureServer.url,
-        storageStatePath: refreshedStorageResult.structuredContent.path,
-        waitUntil: 'domcontentloaded',
-      },
-    });
-    const reopenedSessionId = reopenedResult.structuredContent.sessionId;
-
-    const restoredValue = await client.callTool({
-      name: 'browser_execute_js',
-      arguments: { sessionId: reopenedSessionId, script: 'return localStorage.getItem("restored-key");' },
-    });
-    assert.equal(restoredValue.structuredContent.data, 'restored-value');
 
     const missingSessionScan = await client.callTool({
       name: 'browser_scan',
@@ -539,10 +516,96 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
     });
     assert.equal(missingSessionClose.structuredContent.ok, false);
     assert.equal(missingSessionClose.structuredContent.error.code, 'SESSION_NOT_FOUND');
+  } finally {
+    await client.close();
+    await fixtureServer.close();
+  }
+});
+
+test('mcp browser_generate_playwright accumulates passed validation batches within one session', async () => {
+  const fixtureServer = await startFixtureServer();
+  const { client, transport } = createClient();
+
+  try {
+    await client.connect(transport);
+
+    const openResult = await client.callTool({
+      name: 'browser_open',
+      arguments: {
+        url: fixtureServer.url,
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 5000,
+      },
+    });
+    const sessionId = openResult.structuredContent.sessionId;
+
+    const firstValidation = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId,
+        steps: [
+          { type: 'fill', locator: { strategy: 'placeholder', value: 'email@example.com' }, value: 'qa@example.com' },
+          { type: 'click', locator: { strategy: 'text', value: 'Submit' } },
+        ],
+      },
+    });
+    assert.equal(firstValidation.structuredContent.ok, true);
+
+    const secondValidation = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId,
+        steps: [{ type: 'assert_text', locator: { strategy: 'css', value: '#message' }, value: 'Thanks qa@example.com' }],
+      },
+    });
+    assert.equal(secondValidation.structuredContent.ok, true);
+
+    const generated = await client.callTool({
+      name: 'browser_generate_playwright',
+      arguments: { sessionId, testName: 'multi batch workflow' },
+    });
+
+    assert.equal(generated.structuredContent.ok, true);
+    assert.equal(generated.structuredContent.source.actionCount, 2);
+    assert.equal(generated.structuredContent.source.assertionCount, 1);
+    assert.doesNotMatch(generated.structuredContent.code, /createPagePilotRuntime/);
+    assert.match(generated.structuredContent.code, /fill\('qa@example\.com'\)/);
+    assert.equal(
+      generated.structuredContent.generatedPlan.find((step) => step.type === 'fill')?.value,
+      'qa@example.com'
+    );
+    assert.match(generated.structuredContent.code, /Submit/);
+    assert.match(generated.structuredContent.code, /readAssertionText/);
+    assert.equal(generated.structuredContent.generatedPlan.filter((step) => step.type === 'fill').length >= 1, true);
+    assert.equal(generated.structuredContent.generatedPlan.filter((step) => step.type === 'assert_text').length, 1);
+
+    const replaySession = await client.callTool({
+      name: 'browser_open',
+      arguments: {
+        url: fixtureServer.url,
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 5000,
+      },
+    });
+
+    const replayValidation = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId: replaySession.structuredContent.sessionId,
+        steps: generated.structuredContent.generatedPlan,
+      },
+    });
+
+    assert.equal(replayValidation.structuredContent.ok, true);
 
     await client.callTool({
       name: 'browser_close',
-      arguments: { sessionId: reopenedSessionId },
+      arguments: { sessionId: replaySession.structuredContent.sessionId },
+    });
+
+    await client.callTool({
+      name: 'browser_close',
+      arguments: { sessionId },
     });
   } finally {
     await client.close();
@@ -550,7 +613,55 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
   }
 });
 
-test('mcp browser_run_actions accepts minObserveMs for stability configuration', async () => {
+test('mcp browser_generate_playwright clears stale successful evidence after a later failure', async () => {
+  const fixtureServer = await startFixtureServer();
+  const { client, transport } = createClient();
+
+  try {
+    await client.connect(transport);
+
+    const openResult = await client.callTool({
+      name: 'browser_open',
+      arguments: {
+        url: fixtureServer.url,
+        waitUntil: 'domcontentloaded',
+        timeoutMs: 5000,
+      },
+    });
+    const sessionId = openResult.structuredContent.sessionId;
+
+    const firstValidation = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId,
+        steps: [{ type: 'click', locator: { strategy: 'text', value: 'Submit' } }],
+      },
+    });
+    assert.equal(firstValidation.structuredContent.ok, true);
+
+    const failedValidation = await client.callTool({
+      name: 'browser_validate_playwright',
+      arguments: {
+        sessionId,
+        steps: [{ type: 'click', locator: { strategy: 'text', value: 'Missing submit button' } }],
+      },
+    });
+    assert.equal(failedValidation.structuredContent.ok, false);
+
+    const generated = await client.callTool({
+      name: 'browser_generate_playwright',
+      arguments: { sessionId, testName: 'stale-evidence' },
+    });
+
+    assert.equal(generated.structuredContent.ok, false);
+    assert.equal(generated.structuredContent.error.code, 'NO_VALIDATED_FLOW');
+  } finally {
+    await client.close();
+    await fixtureServer.close();
+  }
+});
+
+test('mcp browser_validate_playwright accepts minObserveMs for stability configuration', async () => {
   const fixtureServer = await startFixtureServer();
   const { client, transport } = createClient();
 
@@ -568,10 +679,10 @@ test('mcp browser_run_actions accepts minObserveMs for stability configuration',
     const sessionId = openResult.structuredContent.sessionId;
 
     const result = await client.callTool({
-      name: 'browser_run_actions',
+      name: 'browser_validate_playwright',
       arguments: {
         sessionId,
-        actions: [
+        steps: [
           { type: 'fill', locator: { strategy: 'label', value: 'Email' }, value: 'qa@example.com' },
           {
             type: 'click',
