@@ -1,7 +1,7 @@
 # Page Pilot Skill Public Tool Contracts
 
-本文件是 `Page Pilot Skill` 公共 MCP 工具面的唯一真相文档。  
-`SKILL.md`、参考文档、benchmark 说明和对外描述都应以这里为准。
+本文件是 `Page Pilot Skill` 公共 MCP 工具面的**人类可读契约索引**。
+公共工具清单的机器可读单一来源是 `plugins/page-pilot-skill/scripts/contracts/public-tool-contracts.js`；`docs/contracts.md`、`docs/tools/*.md`、`SKILL.md`、benchmark 说明和对外描述都必须与该注册表保持一致。
 
 ## Public Tools
 
@@ -75,10 +75,28 @@
   "schemaVersion": "scan.v3",
   "url": "https://example.com/",
   "title": "Example Domain",
+  "detailLevel": "standard",
   "focus": {
     "kind": "form_fill",
     "targetText": "workspace",
     "applied": true
+  },
+  "document": {
+    "title": "Example Domain",
+    "url": "https://example.com/",
+    "lang": "en",
+    "readyState": "complete",
+    "regions": {
+      "main": [{ "name": "main" }],
+      "dialogs": [],
+      "forms": [{ "name": "login-form" }],
+      "tables": [],
+      "lists": [],
+      "headings": [{ "level": 1, "text": "Sign in" }],
+      "frames": [],
+      "shadowRoots": []
+    },
+    "detailLevel": "standard"
   },
   "summary": {
     "retainedInteractiveCount": 6,
@@ -101,6 +119,19 @@
           "menuItems": 0,
           "fileInputs": 0,
           "dateInputs": 0
+        }
+      }
+    }
+  },
+  "hints": {
+    "primaryAction": {
+      "label": "Submit",
+      "locator": {
+        "strategy": "role",
+        "value": {
+          "role": "button",
+          "name": "Submit",
+          "exact": true
         }
       }
     }
@@ -128,7 +159,7 @@
                 "exact": true
               }
             },
-            "score": 0.92,
+            "score": 98,
             "confidence": "high",
             "reasons": ["semantic_role_name", "form_scope"],
             "playwrightExpression": "page.getByRole(\"button\", { name: \"Submit\", exact: true })",
@@ -173,6 +204,13 @@
 - 代替真实动作验证
 - 代替局部只读探针
 
+说明：
+
+- `focus.targetText` 会作为弱加权信号参与元素保留和排序，不是强过滤条件
+- `summary.discoveredInteractiveCount`、`retainedInteractiveCount`、`truncated` 与 `coverage` 保持同一统计口径
+- 当页面已经识别出 `primaryAction` 时，scan 会优先保留并验证这个主动作，即使它的控件组不在 `verification.groups` 里
+- `recommendedLocators[*].verification` 表达的是轻量 locator inspection 结果
+
 ### `browser_rank_locators`
 
 用途：根据 scan 结果对候选 locator 做排序，并输出可直接写入 Playwright 的推荐表达式。
@@ -197,15 +235,52 @@
 ```json
 {
   "ok": true,
+  "query": {
+    "role": "button",
+    "accessibleName": "Submit"
+  },
+  "matchCount": 1,
   "matches": [
     {
+      "rank": 1,
+      "score": 92,
+      "semanticMatchCount": 2,
+      "reasons": [
+        "role_match",
+        "accessible_name_exact_match",
+        "actionable"
+      ],
+      "element": {
+        "role": "button",
+        "accessibleName": "Submit"
+      },
+      "preferredLocator": {
+        "strategy": "role",
+        "value": {
+          "role": "button",
+          "name": "Submit",
+          "exact": true
+        }
+      },
       "locatorType": "role",
       "playwrightExpression": "page.getByRole(\"button\", { name: \"Submit\", exact: true })",
       "matchCount": 1,
       "stabilityReason": "semantic_role_name",
       "fallbackReason": null,
       "confidence": {
-        "score": 0.98
+        "level": "high",
+        "score": 0.98,
+        "reasons": ["semantic_role", "strong_name_source", "in_form_context"]
+      },
+      "fallbackLocators": [
+        {
+          "strategy": "label",
+          "value": "Submit"
+        }
+      ],
+      "stableFingerprint": {
+        "role": "button",
+        "accessibleName": "Submit"
       },
       "locatorChoices": [
         {
@@ -367,7 +442,15 @@
   "ok": true,
   "language": "ts",
   "framework": "playwright-test",
-  "code": "import { test, expect } from '@playwright/test';\n..."
+  "code": "import { test, expect } from '@playwright/test';\n...",
+  "source": {
+    "sessionId": "session-123",
+    "generatedFrom": "validated_playwright_evidence",
+    "startUrl": "https://example.com/form",
+    "finalUrl": "https://example.com/form",
+    "actionCount": 2,
+    "assertionCount": 1
+  }
 }
 ```
 
@@ -410,7 +493,15 @@
   },
   "repairedArtifacts": {
     "code": "import { test, expect } from '@playwright/test';\\n...",
-    "generatedPlan": []
+    "generatedPlan": [],
+    "source": {
+      "sessionId": "session-123",
+      "generatedFrom": "repair_validation_evidence",
+      "startUrl": "https://example.com/form",
+      "finalUrl": "https://example.com/form",
+      "actionCount": 1,
+      "assertionCount": 0
+    }
   }
 }
 ```

@@ -28,6 +28,7 @@ export async function buildLocatorChoices(page, locatorCandidates = [], usage = 
       stabilityReason: candidate?.stabilityReason ?? candidate?.reasons?.[0] ?? null,
       fallbackReason: candidate?.fallbackReason ?? (finalLocator.strategy === 'css' ? 'css_fallback' : null),
       confidence: candidate?.confidence ?? null,
+      inspection: verification?.inspection ?? null,
     });
   }
 

@@ -10,7 +10,7 @@ const availability = spawnSync('codex', ['--version'], {
 
 if (availability.error || availability.status !== 0) {
   process.stderr.write(
-    `Codex CLI is not available. Install Codex and ensure \`codex\` is on PATH before running this installer. ${
+    `Codex CLI is not available. Install Codex and ensure \`codex\` is on PATH before running this installer. You can verify the environment with \`node scripts/doctor.js --require-codex\`. ${
       availability.error?.message ?? availability.stderr?.trim() ?? ''
     }\n`
   );
@@ -36,5 +36,7 @@ if (!alreadyExists) {
   process.exit(firstAdd.status ?? 1);
 }
 process.stdout.write('Page Pilot Skill MCP 已经存在，当前安装保持非破坏性 no-op。\n');
-process.stdout.write('如果你需要刷新注册，请先手动执行 `codex mcp remove page-pilot-skill`，再重新运行 `npm run install:codex`。\n');
+process.stdout.write(
+  '如果你需要刷新注册，请先手动执行 `codex mcp remove page-pilot-skill`，再重新运行 `npm run install:codex`；如需先检查环境，可执行 `node scripts/doctor.js --require-codex`。\n'
+);
 process.exit(0);

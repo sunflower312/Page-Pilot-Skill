@@ -62,7 +62,15 @@
     "expectedStateChanges": [],
     "assertionPlan": [],
     "generatedPlan": [],
-    "metrics": {}
+    "metrics": {},
+    "source": {
+      "sessionId": "session-123",
+      "generatedFrom": "repair_validation_evidence",
+      "startUrl": "https://example.com/form",
+      "finalUrl": "https://example.com/form",
+      "actionCount": 1,
+      "assertionCount": 0
+    }
   }
 }
 ```

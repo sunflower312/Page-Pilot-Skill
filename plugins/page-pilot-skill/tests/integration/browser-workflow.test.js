@@ -754,6 +754,55 @@ test('collectStructuredPageData includes shadow DOM text in scan summaries', asy
   }
 });
 
+test('collectStructuredPageData keeps distinct anonymous controls inside the same shadow host', async () => {
+  const inlineServer = await startInlineHtmlServer(
+    {
+      '/shadow-dedupe': `
+        <!doctype html>
+        <html lang="en">
+          <body>
+            <main>
+              <div id="shadow-dedupe-host"></div>
+              <script>
+                const host = document.getElementById('shadow-dedupe-host');
+                const root = host.attachShadow({ mode: 'open' });
+                root.innerHTML = \`
+                  <button type="button" role="button">Approve</button>
+                  <button type="button" role="button">Reject</button>
+                  <a href="/docs" role="link">Docs</a>
+                  <a href="/support" role="link">Support</a>
+                \`;
+              </script>
+            </main>
+          </body>
+        </html>
+      `,
+    },
+    '/shadow-dedupe'
+  );
+  const manager = new BrowserManager({
+    artifactRoot,
+    idleMs: 30000,
+  });
+
+  try {
+    const session = await manager.openSession({ url: inlineServer.url });
+    const scan = await collectStructuredPageData(session.page, { detailLevel: 'full' });
+    const shadowButtons = scan.interactives.buttons.filter((entry) => entry.fromShadow);
+    const shadowLinks = scan.interactives.links.filter((entry) => entry.fromShadow);
+
+    assert.equal(shadowButtons.length, 2);
+    assert.equal(shadowButtons.some((entry) => entry.accessibleName === 'Approve'), true);
+    assert.equal(shadowButtons.some((entry) => entry.accessibleName === 'Reject'), true);
+    assert.equal(shadowLinks.length, 2);
+    assert.equal(shadowLinks.some((entry) => entry.accessibleName === 'Docs'), true);
+    assert.equal(shadowLinks.some((entry) => entry.accessibleName === 'Support'), true);
+  } finally {
+    await manager.closeAll();
+    await inlineServer.close();
+  }
+});
+
 test('waitForActionStability observes delayed updates inside open shadow DOM', async () => {
   const fixtureServer = await startFixtureServer('shadow-stability-flow.html');
   const manager = new BrowserManager({

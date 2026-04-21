@@ -55,9 +55,16 @@ async function main() {
   const nodeMajor = Number(process.versions.node.split('.')[0]);
   const browserInstalled = await hasChromiumExecutable();
   const scriptDir = fileURLToPath(new URL('.', import.meta.url));
+  const pluginRoot = resolve(scriptDir, '..');
+  const repoRoot = resolve(pluginRoot, '..', '..');
   const serverPath = resolve(scriptDir, 'mcp-server.js');
+  const assembledServerPath = resolve(scriptDir, 'server.js');
   const pluginManifestPath = resolve(scriptDir, '..', '.codex-plugin', 'plugin.json');
+  const packageJsonPath = resolve(pluginRoot, 'package.json');
   const installScriptPath = resolve(scriptDir, 'install-codex-mcp.js');
+  const contractsDocPath = resolve(repoRoot, 'docs', 'contracts.md');
+  const architectureDocPath = resolve(repoRoot, 'docs', 'architecture.md');
+  const developmentDocPath = resolve(repoRoot, 'docs', 'development.md');
   const codex = checkCodexCli();
   const checks = {
     nodeVersion: process.versions.node,
@@ -65,16 +72,26 @@ async function main() {
     chromiumInstalled: browserInstalled,
     codexCliAvailable: codex.available,
     mcpServerPresent: await pathExists(serverPath),
+    assembledServerPresent: await pathExists(assembledServerPath),
+    packageJsonPresent: await pathExists(packageJsonPath),
     pluginManifestPresent: await pathExists(pluginManifestPath),
     installScriptPresent: await pathExists(installScriptPath),
+    contractsDocPresent: await pathExists(contractsDocPath),
+    architectureDocPresent: await pathExists(architectureDocPath),
+    developmentDocPresent: await pathExists(developmentDocPath),
   };
 
   log(`Node.js: ${checks.nodeVersion}`, options);
   log(`Chromium installed: ${checks.chromiumInstalled ? 'yes' : 'no'}`, options);
   log(`Codex CLI available: ${checks.codexCliAvailable ? 'yes' : 'no'}`, options);
   log(`MCP server entry present: ${checks.mcpServerPresent ? 'yes' : 'no'}`, options);
+  log(`Server assembly present: ${checks.assembledServerPresent ? 'yes' : 'no'}`, options);
+  log(`Plugin package present: ${checks.packageJsonPresent ? 'yes' : 'no'}`, options);
   log(`Plugin manifest present: ${checks.pluginManifestPresent ? 'yes' : 'no'}`, options);
   log(`Install script present: ${checks.installScriptPresent ? 'yes' : 'no'}`, options);
+  log(`Contracts doc present: ${checks.contractsDocPresent ? 'yes' : 'no'}`, options);
+  log(`Architecture doc present: ${checks.architectureDocPresent ? 'yes' : 'no'}`, options);
+  log(`Development doc present: ${checks.developmentDocPresent ? 'yes' : 'no'}`, options);
 
   if (!checks.nodeSupported) {
     process.stderr.write('Node.js 20 or newer is required.\n');
@@ -94,6 +111,18 @@ async function main() {
     return;
   }
 
+  if (!checks.assembledServerPresent) {
+    process.stderr.write('Missing assembled server module at scripts/server.js.\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!checks.packageJsonPresent) {
+    process.stderr.write('Missing plugin package.json at plugins/page-pilot-skill/package.json.\n');
+    process.exitCode = 1;
+    return;
+  }
+
   if (!checks.pluginManifestPresent) {
     process.stderr.write('Missing plugin manifest at plugins/page-pilot-skill/.codex-plugin/plugin.json.\n');
     process.exitCode = 1;
@@ -106,9 +135,17 @@ async function main() {
     return;
   }
 
+  if (!checks.contractsDocPresent || !checks.architectureDocPresent || !checks.developmentDocPresent) {
+    process.stderr.write('Missing one or more required repository docs under docs/ (contracts, architecture, development).\n');
+    process.exitCode = 1;
+    return;
+  }
+
   if (options.requireCodex && !checks.codexCliAvailable) {
     process.stderr.write(
-      `Codex CLI is not available. Install or expose \`codex\` on PATH before running the installer. ${codex.error ? `(${codex.error})` : ''}\n`
+      `Codex CLI is not available. Install or expose \`codex\` on PATH before running the installer, then rerun \`node scripts/doctor.js --require-codex\`. ${
+        codex.error ? `(${codex.error})` : ''
+      }\n`
     );
     process.exitCode = 1;
     return;

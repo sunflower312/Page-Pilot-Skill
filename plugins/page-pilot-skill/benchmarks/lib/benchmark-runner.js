@@ -22,7 +22,10 @@ import {
 import { siteRegistry } from '../registry/sites.js';
 
 export function benchmarkRunSucceeded(run) {
-  return run?.acceptance?.ok === true && run?.coverage?.betaGate?.ok === true;
+  return (
+    run?.acceptance?.ok === true &&
+    (run?.coverage?.betaGate?.enforced === false || run?.coverage?.betaGate?.ok === true)
+  );
 }
 
 function cloneSelectedSite(site, scenarios) {
@@ -424,6 +427,7 @@ async function executeScenario({ site, scenario, ensureClient, moduleLoader }) {
 export async function runBenchmarks(options = {}) {
   const registry = normalizeRegistry(options.registry ?? siteRegistry);
   const filters = normalizeFilters(options.filters);
+  const hasFilters = filters.site.size > 0 || filters.scenario.size > 0 || filters.tag.size > 0;
   const catalog = selectRegistry(registry, filters);
   const selection = selectRegistry(registry, filters, { runnableOnly: true });
   const run = {
@@ -443,7 +447,10 @@ export async function runBenchmarks(options = {}) {
       sites: catalog.sites,
       summary: summarizeCatalog(catalog.sites),
     },
-    coverage: buildCoverageMatrix(registry),
+    coverage: buildCoverageMatrix(registry, [], {
+      enforceBetaGate: !hasFilters,
+      scope: hasFilters ? 'filtered-selection' : 'full-registry',
+    }),
     sites: selection.sites,
     results: [],
     summary: buildEmptySummary(),
@@ -489,7 +496,10 @@ export async function runBenchmarks(options = {}) {
     run.finishedAt = new Date().toISOString();
     run.summary = summarizeResults(selection.sites, run.results);
     run.acceptance = evaluateAcceptance(run.summary);
-    run.coverage = buildCoverageMatrix(registry, run.results);
+    run.coverage = buildCoverageMatrix(registry, run.results, {
+      enforceBetaGate: !hasFilters,
+      scope: hasFilters ? 'filtered-selection' : 'full-registry',
+    });
 
     if (client && typeof client.close === 'function') {
       await client.close();

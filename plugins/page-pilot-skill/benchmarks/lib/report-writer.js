@@ -72,6 +72,10 @@ function renderList(lines, entries) {
   }
 }
 
+function renderMetricValue(value) {
+  return value === null || value === undefined ? 'n/a' : value;
+}
+
 async function renderMarkdown(run) {
   const lines = [
     '# Page Pilot Skill Benchmark Report',
@@ -91,6 +95,8 @@ async function renderMarkdown(run) {
     `- Passed: ${run.summary.passed}`,
     `- Failed: ${run.summary.failed}`,
     `- Skipped: ${run.summary.skipped}`,
+    `- Total duration (ms): ${run.summary.totalDurationMs}`,
+    `- Average duration (ms): ${run.summary.averageDurationMs}`,
     '',
     '## Acceptance',
     '',
@@ -111,7 +117,13 @@ async function renderMarkdown(run) {
     `- Qualified sites: ${run.coverage.summary.qualifiedSiteCount}`,
     `- Qualified scenarios: ${run.coverage.summary.qualifiedScenarioCount}`,
     `- Pending scenarios: ${run.coverage.summary.pendingScenarioCount}`,
-    `- Beta gate: ${run.coverage.betaGate.ok ? 'passed' : 'failed'}`,
+    `- Beta gate: ${
+      run.coverage.betaGate.enforced === false
+        ? `not-applicable (${run.coverage.betaGate.reason ?? 'filtered selection'})`
+        : run.coverage.betaGate.ok
+          ? 'passed'
+          : 'failed'
+    }`,
     '',
   ];
 
@@ -128,21 +140,33 @@ async function renderMarkdown(run) {
     );
   }
   lines.push('', '### Code Quality Gate', '');
-  lines.push(`- Eligible scenarios: ${run.coverage.summary.codeQualityEligibleScenarioCount}`);
+  if (run.coverage.betaGate.enforced === false) {
+    lines.push('- Coverage scope note: code-quality eligibility counts below still describe the full registry, not just this filtered selection.');
+  }
+  lines.push(`- Eligible scenarios (full registry): ${run.coverage.summary.codeQualityEligibleScenarioCount}`);
   lines.push(
-    `- Eligible scenarios skipped for external outages: ${run.coverage.summary.codeQualityExternalUnavailableSkipped}`
+    `- Eligible scenarios skipped for external outages (full registry): ${run.coverage.summary.codeQualityExternalUnavailableSkipped}`
   );
-  lines.push(`- Scenarios with code quality data: ${run.coverage.codeQuality.scenarioCount}`);
-  lines.push(`- Semantic locator ratio: ${run.coverage.codeQuality.semanticLocatorRatio}`);
-  lines.push(`- CSS fallback ratio: ${run.coverage.codeQuality.cssFallbackRatio}`);
-  lines.push(`- Unique locator hit rate: ${run.coverage.codeQuality.uniqueLocatorHitRate}`);
-  lines.push(`- First validation pass rate: ${run.coverage.codeQuality.firstValidationPassRate}`);
-  lines.push(`- Generated validation pass rate: ${run.coverage.codeQuality.generatedValidationPassRate}`);
+  lines.push(`- Scenarios with code quality data in this run: ${run.coverage.codeQuality.scenarioCount}`);
+  lines.push(`- Semantic locator ratio: ${renderMetricValue(run.coverage.codeQuality.semanticLocatorRatio)}`);
+  lines.push(`- CSS fallback ratio: ${renderMetricValue(run.coverage.codeQuality.cssFallbackRatio)}`);
+  lines.push(`- Unique locator hit rate: ${renderMetricValue(run.coverage.codeQuality.uniqueLocatorHitRate)}`);
+  lines.push(`- First validation pass rate: ${renderMetricValue(run.coverage.codeQuality.firstValidationPassRate)}`);
+  lines.push(`- Generated validation pass rate: ${renderMetricValue(run.coverage.codeQuality.generatedValidationPassRate)}`);
   lines.push(`- Repair attempts: ${run.coverage.codeQuality.repairAttemptCount}`);
   lines.push(
-    `- Repair pass rate: ${run.coverage.codeQuality.repairPassRate === null ? 'n/a' : run.coverage.codeQuality.repairPassRate}`
+    `- Repair pass rate: ${renderMetricValue(run.coverage.codeQuality.repairPassRate)}`
   );
-  lines.push(`- Average generated code lines: ${run.coverage.codeQuality.averageCodeLineCount}`);
+  lines.push(`- Average generated code lines: ${renderMetricValue(run.coverage.codeQuality.averageCodeLineCount)}`);
+  lines.push('');
+  lines.push('### Slowest Scenarios', '');
+  if ((run.summary.slowestScenarios ?? []).length === 0) {
+    lines.push('- none');
+  } else {
+    for (const scenario of run.summary.slowestScenarios) {
+      lines.push(`- ${scenario.siteId} / ${scenario.scenarioId}: ${scenario.durationMs} ms (${scenario.status})`);
+    }
+  }
   lines.push('');
 
   for (const site of run.catalog.sites) {

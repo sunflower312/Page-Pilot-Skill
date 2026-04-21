@@ -775,7 +775,7 @@ export const siteRegistry = [
       ),
       scenario(
         'progressbar-stop',
-        'Stop the progress bar near the requested threshold',
+        'Stop the progress bar inside the tolerated target band',
         '../scenarios/ui-testing-playground/progressbar-stop.js',
         'http://uitestingplayground.com/progressbar',
         ['progressbar', 'waiting', 'timing'],
@@ -783,12 +783,13 @@ export const siteRegistry = [
           steps: [
             'Open the progress bar page.',
             'Start the progress bar.',
-            'Wait until it reaches the target range and stop it.',
+            'Wait until it reaches the target range and stop it before completion.',
           ],
-          expectedResult: 'The progress bar stops near the requested 75 percent target instead of running to completion.',
+          expectedResult:
+            'The progress bar stops inside the benchmark tolerance band around the requested 75 percent target instead of running to completion.',
           failureModes: [
             'The progress bar never starts or never advances.',
-            'The stop action misses the target range by too much.',
+            'The stop action falls outside the tolerated band around the target.',
             'The page stops exposing the progress value.',
           ],
         }

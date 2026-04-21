@@ -28,8 +28,52 @@ function toHintLocator(entry = {}) {
   return toHintLocators(entry)[0] ?? null;
 }
 
+function locatorsEqual(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function findPrimaryActionEntry(scan = {}, retainedEntries = []) {
+  const primaryAction = scan.hints?.primaryAction;
+  if (!primaryAction) {
+    return null;
+  }
+
+  return (
+    retainedEntries.find((entry) => {
+      if (!['buttons', 'links'].includes(entry.group)) {
+        return false;
+      }
+
+      return (
+        (primaryAction.locator && toHintLocators(entry).some((locator) => locatorsEqual(locator, primaryAction.locator))) ||
+        (primaryAction.label &&
+          [entry.accessibleName, entry.visibleText, entry.label, entry.name, entry.text].filter(Boolean).includes(primaryAction.label))
+      );
+    }) ?? null
+  );
+}
+
+function getVerificationActionForEntry(entry = {}) {
+  if (['inputs', 'textareas', 'dateInputs'].includes(entry.group)) {
+    return 'fill';
+  }
+  if (['selects', 'options'].includes(entry.group)) {
+    return 'select';
+  }
+  if (['checkboxes', 'radios', 'switches'].includes(entry.group)) {
+    return 'check';
+  }
+  if (entry.group === 'fileInputs') {
+    return 'set_files';
+  }
+  return 'click';
+}
+
 function refreshScanHints(scan = {}) {
-  const retainedEntries = Object.values(scan.interactives ?? {}).flat();
+  const retainedEntries = [...Object.values(scan.interactives ?? {}).flat(), ...Object.values(scan.specializedControls ?? {}).flat()];
   const formFieldLimit = scan.hints?.formFields?.length ?? 0;
   const activeDialog = selectActiveDialog(scan.document?.dialogs ?? []);
   const primaryAction = selectPrimaryAction(
@@ -39,7 +83,7 @@ function refreshScanHints(scan = {}) {
 
   if (Array.isArray(scan.hints?.formFields)) {
     scan.hints.formFields = retainedEntries
-      .filter((entry) => ['inputs', 'selects', 'textareas', 'checkboxes'].includes(entry.group))
+      .filter((entry) => ['inputs', 'selects', 'textareas', 'checkboxes', 'radios', 'switches', 'fileInputs', 'dateInputs'].includes(entry.group))
       .slice(0, formFieldLimit)
       .map((entry) => ({
         label: entry.accessibleName || entry.visibleText || entry.label || entry.name || entry.text || '',
@@ -65,7 +109,7 @@ function refreshScanHints(scan = {}) {
   return scan;
 }
 
-async function enrichScanWithLocatorVerification(pageLike, scan, verification = {}) {
+export async function enrichScanWithLocatorVerification(pageLike, scan, verification = {}, { buildChoices = buildLocatorChoices } = {}) {
   if (verification?.enabled !== true) {
     return scan;
   }
@@ -90,10 +134,9 @@ async function enrichScanWithLocatorVerification(pageLike, scan, verification = 
   );
   const maxPerElement = Math.max(1, Math.min(verification.maxPerElement ?? 1, 2));
   const retainedEntries = [...Object.values(scan.interactives ?? {}).flat(), ...Object.values(scan.specializedControls ?? {}).flat()];
+  const primaryActionEntry = findPrimaryActionEntry(scan, retainedEntries);
   const highValueEntries = [
-    ...(scan.hints?.primaryAction?.label
-      ? scan.interactives.buttons.filter((entry) => entry.accessibleName === scan.hints.primaryAction.label).slice(0, 1)
-      : []),
+    ...(primaryActionEntry ? [primaryActionEntry] : []),
     ...retainedEntries
       .filter((entry) => allowedGroups.has(entry.group))
       .slice(0, 6),
@@ -106,7 +149,8 @@ async function enrichScanWithLocatorVerification(pageLike, scan, verification = 
       continue;
     }
     seen.add(key);
-    const choices = await buildLocatorChoices(pageLike, entry.recommendedLocators.slice(0, maxPerElement), entry.group === 'inputs' ? 'fill' : 'click');
+    const verificationAction = getVerificationActionForEntry(entry);
+    const choices = await buildChoices(pageLike, entry.recommendedLocators.slice(0, maxPerElement), verificationAction);
     entry.recommendedLocators = entry.recommendedLocators.map((candidate, index) => {
       const choice = choices[index];
       if (!choice) {
@@ -119,11 +163,16 @@ async function enrichScanWithLocatorVerification(pageLike, scan, verification = 
         playwrightExpression: choice.playwrightExpression,
         verification: {
           attempted: true,
-          unique: choice.matchCount === 1,
-          matchCount: choice.matchCount,
-          visible: entry.actionability?.visible ?? null,
-          enabled: entry.actionability?.enabled ?? null,
-          action: entry.group === 'inputs' ? 'fill' : 'click',
+          unique: choice.inspection?.unique ?? choice.matchCount === 1,
+          matchCount: choice.inspection?.count ?? choice.matchCount,
+          visible: choice.inspection?.visible ?? null,
+          enabled: choice.inspection?.enabled ?? null,
+          editable: choice.inspection?.editable ?? null,
+          actionable: choice.inspection?.actionable ?? null,
+          usable: choice.inspection?.usable ?? null,
+          failureCode: choice.inspection?.failureCode ?? null,
+          message: choice.inspection?.message ?? null,
+          action: verificationAction,
           source: 'scan',
         },
       };
@@ -154,6 +203,9 @@ export async function collectStructuredPageData(
     includeSpecializedControls,
     collectionSettings: settings,
   });
-
-  return enrichScanWithLocatorVerification(pageLike, normalized, verification);
+  const enriched = await enrichScanWithLocatorVerification(pageLike, normalized, verification);
+  return {
+    ok: true,
+    ...enriched,
+  };
 }

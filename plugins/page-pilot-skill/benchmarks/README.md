@@ -100,17 +100,31 @@ The CLI summary also prints the current coverage counts and whether the Beta gat
 - did the selected scenarios pass
 - does the overall code-quality benchmark still satisfy the Beta floor
 
+When you apply `--site`, `--scenario`, or `--tag` filters, the runner treats the execution as a filtered selection run. In that mode:
+
+- acceptance still reflects the selected runnable scenarios
+- coverage still shows the full registry inventory for context
+- `Beta gate` is reported as `not-applicable (filtered selection)` and does not control the process exit code
+
+The JSON and Markdown reports also include:
+
+- total run duration
+- average scenario duration
+- slowest scenario list
+
+These metrics are meant for operational visibility. They do not change the public Page Pilot Skill contract, but they make it easier to spot slow external sites and regressions in benchmark runtime behavior.
+
 `npm run benchmark:test` runs the benchmark runner self-checks only. These files intentionally use `*.check.js` so they do not fall into the default `node --test` auto-discovery path used by `npm test`.
 
 ## Acceptance Gate
 
-The CLI exits with code `0` only when every selected and runnable benchmark scenario passes **and** the Beta code-quality gate passes. It exits with code `1` when:
+The CLI exits with code `0` only when every selected and runnable benchmark scenario passes **and**, for full-registry runs, the Beta code-quality gate passes. It exits with code `1` when:
 
 - no qualified scenarios match the current filters
 - selected scenarios do not execute
 - selected scenarios execute but none pass
 - any selected scenario fails or is skipped
-- the Beta code-quality gate fails even though the runnable scenarios themselves passed
+- the Beta code-quality gate fails on a full-registry run even though the runnable scenarios themselves passed
 
 This makes the suite behave like a real acceptance gate rather than a best-effort smoke run.
 

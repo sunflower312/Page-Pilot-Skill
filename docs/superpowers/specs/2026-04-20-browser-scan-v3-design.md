@@ -143,6 +143,20 @@ v3 所涉及的契约示例不能只靠人工维护。至少需要：
 - `doctor.js` 增强为更完整的开发环境自检入口
 - integration 测试与浏览器依赖的开发体验继续优化
 
+### 4.5 v3 第二阶段收口项
+
+在 v3 第一版已经落地的前提下，第二阶段必须继续收紧以下协议与结果语义：
+
+1. `focus.targetText` 不能只出现在输入和输出里，必须真正参与弱加权匹配。
+2. `summary.discoveredInteractiveCount / retainedInteractiveCount / truncated` 必须改成与 `coverage` 和 `specializedControls` 一致的统计口径。
+3. Shadow DOM 去重必须使用 descendant 级稳定 key，避免同 host 下匿名同组控件误去重。
+4. scan-time `verification.visible / enabled / usable` 必须来自真实 locator inspection，而不是 `entry.actionability`。
+5. `hints.possibleResultRegions` 必须直接从 `collections.resultRegions` 派生。
+6. `specializedControls` 在 form 场景下应逐步进入 `hints.formFields` 摘要。
+7. 顶层 `ok` 只保留工具层单一注入点。
+
+这些收口项不改变 `scan.v3` 的主方向，但会显著提高它对外作为协议产品的可信度。
+
 ## 5. browser_scan v3 输入契约
 
 v3 在保留现有输入基础上新增以下可选字段。
@@ -217,7 +231,22 @@ v3 在保留现有输入基础上新增以下可选字段。
 {
   "enabled": false,
   "maxPerElement": 1,
-  "groups": ["buttons", "links", "inputs", "selects", "textareas", "checkboxes"]
+  "groups": [
+    "buttons",
+    "links",
+    "inputs",
+    "selects",
+    "textareas",
+    "checkboxes",
+    "radios",
+    "switches",
+    "sliders",
+    "tabs",
+    "options",
+    "menuItems",
+    "fileInputs",
+    "dateInputs"
+  ]
 }
 ```
 

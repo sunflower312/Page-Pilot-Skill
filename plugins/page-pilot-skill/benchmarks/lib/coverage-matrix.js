@@ -82,14 +82,14 @@ function buildCodeQualitySummary(results = []) {
   if (entries.length === 0) {
     return {
       scenarioCount: 0,
-      semanticLocatorRatio: 0,
-      cssFallbackRatio: 0,
-      uniqueLocatorHitRate: 0,
-      firstValidationPassRate: 0,
-      generatedValidationPassRate: 0,
+      semanticLocatorRatio: null,
+      cssFallbackRatio: null,
+      uniqueLocatorHitRate: null,
+      firstValidationPassRate: null,
+      generatedValidationPassRate: null,
       repairAttemptCount,
       repairPassRate: repairAttemptCount === 0 ? null : 0,
-      averageCodeLineCount: 0,
+      averageCodeLineCount: null,
     };
   }
 
@@ -131,7 +131,20 @@ function buildCodeQualitySummary(results = []) {
   };
 }
 
-function evaluateBetaGate(summary, siteDepth, codeQuality) {
+function evaluateBetaGate(summary, siteDepth, codeQuality, options = {}) {
+  const enforced = options.enforceBetaGate !== false;
+  const scope = options.scope ?? 'full-registry';
+
+  if (!enforced) {
+    return {
+      ok: true,
+      enforced: false,
+      scope,
+      failures: [],
+      reason: 'filtered selection',
+    };
+  }
+
   const failures = [];
   const eligibleQualifiedScenarioCount =
     summary.codeQualityEligibleScenarioCount - (summary.codeQualityExternalUnavailableSkipped ?? 0);
@@ -213,11 +226,14 @@ function evaluateBetaGate(summary, siteDepth, codeQuality) {
 
   return {
     ok: failures.length === 0,
+    enforced: true,
+    scope,
     failures,
+    reason: null,
   };
 }
 
-export function buildCoverageMatrix(registry = [], results = []) {
+export function buildCoverageMatrix(registry = [], results = [], options = {}) {
   const sites = normalizeRegistry(registry);
   const siteDepth = sites.map(siteScenarioSummary).sort((left, right) => left.id.localeCompare(right.id));
   const externalUnavailableSkipped = results.filter(
@@ -253,6 +269,6 @@ export function buildCoverageMatrix(registry = [], results = []) {
     summary,
     siteDepth,
     codeQuality,
-    betaGate: evaluateBetaGate(summary, siteDepth, codeQuality),
+    betaGate: evaluateBetaGate(summary, siteDepth, codeQuality, options),
   };
 }

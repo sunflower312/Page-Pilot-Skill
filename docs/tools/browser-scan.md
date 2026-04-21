@@ -33,11 +33,14 @@
 - `focus`
   - 可选的预算倾斜提示，不是强过滤器
   - 当前支持 `generic`、`form_fill`、`dialog`、`search_results`、`table_actions`、`navigation`、`content_extract`
+  - `targetText` 会作为弱加权信号参与保留与排序，但不会做硬过滤
 - `includeSpecializedControls`
   - 打开后返回扩展控件分组，例如 `radio`、`switch`、`tab`、`date/file` 等
 - `verification`
   - 可选的轻量 locator 验证
   - 只会在受预算约束的少量高价值元素上运行，不替代 `browser_validate_playwright`
+  - 当页面已经识别出 `primaryAction` 时，scan 会优先保留并验证这个主动作，即使它的控件组不在 `verification.groups` 里
+  - 返回的是 locator inspection 结果，不是 scan 时的静态元素状态拷贝
 
 ## Output
 
@@ -182,7 +185,7 @@
                 "exact": true
               }
             },
-            "score": 0.92,
+            "score": 96,
             "confidence": "high",
             "reasons": ["semantic_role_name", "form_scope"],
             "playwrightExpression": "page.getByRole(\"textbox\", { name: \"Email\", exact: true })",
@@ -195,6 +198,7 @@
               "matchCount": 1,
               "visible": true,
               "enabled": true,
+              "usable": true,
               "action": "fill",
               "source": "scan"
             }
@@ -303,6 +307,7 @@
 
 这里是排序后的候选 locator 列表，供 `browser_generate_playwright` 和 `browser_rank_locators` 继续复用。
 当 `verification.enabled` 打开时，top locator 还会带回轻量验证结果，但这仍然只是局部证据。
+其中 `verification.visible / enabled / usable` 来自真实 locator inspection，而不是 `actionability` 的简单回填。
 
 ### `stableFingerprint`
 
@@ -348,6 +353,24 @@
 ### `collections`
 
 这里提供第一版集合区语义，用于帮助 code generation 理解表格、列表和结果区。
+
+### `summary`
+
+- `retainedInteractiveCount`
+  - 最终保留在 scan 结果中的交互元素数量，包含主 `interactives` 与返回的 `specializedControls`
+- `discoveredInteractiveCount`
+  - 扫描时真实发现的交互元素总数，按 `coverage.discoveredByGroup` 汇总
+- `truncated`
+  - 只要任一 `coverage.omittedByGroup` 非零即为 `true`
+- `coverage`
+  - 对 discovered / retained / omitted / budget 的分组解释
+
+### `hints`
+
+- `possibleResultRegions`
+  - 直接从 `collections.resultRegions` 派生，不再单独维护一套 list-only 摘要
+- `formFields`
+  - 在 `includeSpecializedControls=true` 且页面存在相关控件时，会逐步纳入 `radios / switches / fileInputs / dateInputs`
 
 ## Not For
 

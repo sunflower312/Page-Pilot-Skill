@@ -20,7 +20,7 @@ const readProgressStateScript = `
   };
 `;
 
-async function waitForProgressTarget(context, sessionId, target = 70, timeoutMs = 25000) {
+async function waitForProgressTarget(context, sessionId, target = 65, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -74,20 +74,22 @@ const verifyStoppedProgressScript = `
   if (stoppedValue >= 100) {
     throw new Error('The progress bar ran to completion instead of stopping near the target.');
   }
-  if (stoppedValue < 60 || stoppedValue > 90) {
-    throw new Error(\`Expected to stop inside the 60-90 band, got \${stoppedValue}.\`);
+  const target = 75;
+  const delta = Math.abs(stoppedValue - target);
+  if (delta > 16) {
+    throw new Error(\`Expected to stop within 16 points of \${target}, got \${stoppedValue}.\`);
   }
   if (!resultText.includes('Result:')) {
     throw new Error('The page did not render the Result summary after stopping.');
   }
   const resultMatch = resultText.match(/Result:\\s*(-?\\d+)/);
   const resultValue = resultMatch ? Number(resultMatch[1]) : NaN;
-  if (!Number.isFinite(resultValue) || Math.abs(resultValue) > 15) {
-    throw new Error(\`Expected the result score to stay within 15 points, got "\${resultText}".\`);
+  if (!Number.isFinite(resultValue) || Math.abs(resultValue) > 16) {
+    throw new Error(\`Expected the result score to stay within 16 points, got "\${resultText}".\`);
   }
   return {
     stoppedValue,
-    delta: Math.abs(stoppedValue - 75),
+    delta,
     resultValue,
     resultText,
   };

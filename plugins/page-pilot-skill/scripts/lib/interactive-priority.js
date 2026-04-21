@@ -60,6 +60,7 @@ export function createInteractivePriorityRuntime({ config, focus } = {}) {
   };
   const resolvedConfig = config ?? INTERACTIVE_PRIORITY_CONFIG;
   const focusKind = focus?.kind ?? 'generic';
+  const focusTargetText = compactText(String(focus?.targetText ?? '')).toLowerCase();
   const patterns = {
     forwardAction: new RegExp(resolvedConfig.patterns?.forwardAction ?? '', 'i'),
     secondaryAction: new RegExp(resolvedConfig.patterns?.secondaryAction ?? '', 'i'),
@@ -128,6 +129,35 @@ export function createInteractivePriorityRuntime({ config, focus } = {}) {
   function getInteractiveLabel(entry = {}) {
     const normalized = normalizeInteractiveEntry(entry);
     return compactText(Array.from(new Set([normalized.name, normalized.text, normalized.label].filter(Boolean))).join(' '));
+  }
+
+  function hasTargetText(value = '') {
+    if (!focusTargetText) {
+      return false;
+    }
+    return compactText(String(value)).toLowerCase().includes(focusTargetText);
+  }
+
+  function getFocusTargetBoost(entry = {}) {
+    if (!focusTargetText) {
+      return 0;
+    }
+
+    let score = 0;
+    if (hasTargetText(entry.accessibleName) || hasTargetText(entry.name) || hasTargetText(entry.text) || hasTargetText(entry.label)) {
+      score += 16;
+    }
+    if (hasTargetText(entry.visibleText) || hasTargetText(entry.description)) {
+      score += 8;
+    }
+    if (hasTargetText(entry.localContext?.heading?.text)) {
+      score += 6;
+    }
+    if (hasTargetText(entry.localContext?.table?.name) || hasTargetText(entry.localContext?.list?.name)) {
+      score += 5;
+    }
+
+    return Math.min(score, 20);
   }
 
   function getWorkflowActionKind(entry = {}) {
@@ -271,6 +301,8 @@ export function createInteractivePriorityRuntime({ config, focus } = {}) {
     if (focusKind === 'navigation' && entry.group === 'links') {
       score += 10;
     }
+
+    score += getFocusTargetBoost(entry);
 
     return score;
   }

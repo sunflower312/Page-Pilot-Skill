@@ -422,7 +422,12 @@ export function collectStructuredPageDataRuntime(payload, fixtureData) {
     raw.discoveredCounts[group] += 1;
   };
   const makeInteractiveKey = (element, group, meta = {}) =>
-    `${group}:${meta.hostCss ?? 'document'}:${element.id || element.getAttribute('name') || element.getAttribute('aria-label') || element.tagName}:${meta.anchorIndex ?? ''}`;
+    `${group}:${meta.hostCss ?? 'document'}:${
+      element.id ||
+      element.getAttribute('name') ||
+      element.getAttribute('aria-label') ||
+      (meta.host ? `${element.tagName}:${meta.shadowLocalIndex ?? ''}` : element.tagName)
+    }:${meta.host ? meta.shadowLocalIndex ?? '' : meta.anchorIndex ?? ''}`;
   const mapFormControl = (element, meta = {}) => {
     const owner = meta.host ?? element;
     const tagName = element.tagName.toLowerCase();
@@ -738,32 +743,36 @@ export function collectStructuredPageDataRuntime(payload, fixtureData) {
     }
 
     if (settings.includeShadowInteractives) {
-      Array.from(host.shadowRoot.querySelectorAll('input,textarea,select')).forEach((element) =>
+      Array.from(host.shadowRoot.querySelectorAll('input,textarea,select')).forEach((element, shadowLocalIndex) =>
         addFormControl(element, {
           host,
           anchorIndex: meta.anchorIndex,
           hostCss: meta.hostCss,
+          shadowLocalIndex,
         })
       );
-      Array.from(host.shadowRoot.querySelectorAll('button,input[type="button"],input[type="submit"]')).forEach((element) =>
+      Array.from(host.shadowRoot.querySelectorAll('button,input[type="button"],input[type="submit"]')).forEach((element, shadowLocalIndex) =>
         addButton(element, {
           host,
           anchorIndex: meta.anchorIndex,
           hostCss: meta.hostCss,
+          shadowLocalIndex,
         })
       );
-      Array.from(host.shadowRoot.querySelectorAll('a[href]')).forEach((element) =>
+      Array.from(host.shadowRoot.querySelectorAll('a[href]')).forEach((element, shadowLocalIndex) =>
         addLink(element, {
           host,
           anchorIndex: meta.anchorIndex,
           hostCss: meta.hostCss,
+          shadowLocalIndex,
         })
       );
-      Array.from(host.shadowRoot.querySelectorAll('[role]')).forEach((element) =>
+      Array.from(host.shadowRoot.querySelectorAll('[role]')).forEach((element, shadowLocalIndex) =>
         addRoleBasedInteractive(element, {
           host,
           anchorIndex: meta.anchorIndex,
           hostCss: meta.hostCss,
+          shadowLocalIndex,
         })
       );
     }
@@ -791,6 +800,31 @@ export function collectStructuredPageDataRuntime(payload, fixtureData) {
     option: 'options',
     menuitem: 'menuItems',
   };
+  const isRedundantRoleForNativeCollector = (element, role) => {
+    const tagName = element.tagName.toLowerCase();
+    const inputType = (element.getAttribute('type') || '').toLowerCase();
+
+    if (role === 'button' && (tagName === 'button' || (tagName === 'input' && ['button', 'submit'].includes(inputType)))) {
+      return true;
+    }
+    if (role === 'link' && tagName === 'a' && element.hasAttribute('href')) {
+      return true;
+    }
+    if (role === 'textbox' && (tagName === 'input' || tagName === 'textarea')) {
+      return true;
+    }
+    if (role === 'combobox' && tagName === 'select') {
+      return true;
+    }
+    if (role === 'checkbox' && tagName === 'input' && inputType === 'checkbox') {
+      return true;
+    }
+    if (role === 'radio' && tagName === 'input' && inputType === 'radio') {
+      return true;
+    }
+
+    return false;
+  };
   const addRoleBasedInteractive = (element, meta = {}) => {
     const owner = meta.host ?? element;
     const roleResult = getRoleWithSource(element);
@@ -815,6 +849,10 @@ export function collectStructuredPageDataRuntime(payload, fixtureData) {
     ]);
 
     if (!supportedRoles.has(role)) {
+      return;
+    }
+
+    if (isRedundantRoleForNativeCollector(element, role)) {
       return;
     }
 

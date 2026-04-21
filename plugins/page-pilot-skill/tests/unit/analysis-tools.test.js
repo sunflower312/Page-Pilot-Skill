@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mergeVerifiedLocatorChoices } from '../../scripts/tools/analysis-tools.js';
+import { mergeVerifiedLocatorChoices } from '../../scripts/tools/response-shaping.js';
 
 test('mergeVerifiedLocatorChoices rewrites preferred and recommended locators to the verified fallback locator', () => {
   const match = {

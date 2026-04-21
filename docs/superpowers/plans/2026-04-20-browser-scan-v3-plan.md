@@ -170,6 +170,39 @@
 - [x] 清理 `__agentBrowser*` 一类旧内部命名，统一为 `pagePilot*`
 - [x] 跑一次关键字检查，确认 `browser_scan v3` 契约说明和旧命名收尾一致
 
+## Phase 6：协议细化与结果语义拉齐
+
+**Files:**
+- Modify: `plugins/page-pilot-skill/scripts/lib/interactive-priority.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan-runtime.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan-shaping.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan.js`
+- Modify: `plugins/page-pilot-skill/scripts/tools/analysis-tools.js`
+- Modify: `plugins/page-pilot-skill/scripts/tools/locator-choices.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/structured-scan.test.js`
+- Modify: `plugins/page-pilot-skill/tests/integration/browser-workflow.test.js`
+- Modify: `docs/tools/browser-scan.md`
+- Modify: `docs/contracts.md`
+
+**Deliverables:**
+- `targetText` 生效规则
+- `summary` 顶层计数语义修正
+- Shadow DOM 去重正确性测试
+- 真实 inspection 驱动的 scan-time verification
+- `possibleResultRegions` / `collections.resultRegions` 统一
+- `specializedControls` 补入 `formFields`
+- 顶层 `ok` 单一注入点
+
+- [x] 让 `focus.targetText` 参与 scan 保留和优先级弱加权，不再只是回显字段
+- [x] 将 `summary.discoveredInteractiveCount` 改为基于 `raw.discoveredCounts` 汇总，避免复用 runtime 截断后的 flatten 长度
+- [x] 将 `retainedInteractiveCount` 改为主 `interactives` 与 `specializedControls` 合并口径
+- [x] 将 `truncated` 改为只要任一 `coverage.omittedByGroup` 非零即为 `true`
+- [x] 为 Shadow DOM 同 host 多匿名按钮/链接/role widget 补去重回归测试，并修复 key 生成逻辑
+- [x] 让 `buildLocatorChoices()` 透传完整 inspection 结果，并让 scan 中的 `verification.visible / enabled / usable` 来源于 inspection
+- [x] 让 `possibleResultRegions` 直接从 `collections.resultRegions` 派生，并同步更新 `primaryCollection` 文档说明
+- [x] 将 `radios / dateInputs / fileInputs / switches` 纳入 `hints.formFields` 摘要
+- [x] 移除 `normalizeRawScan()` 内的重复 `ok: true`，保留工具层统一 envelope 注入
+
 ## 验收标准
 
 - [x] `browser_scan` 顶层 envelope 与全仓公共规则一致
@@ -182,3 +215,8 @@
 - [x] `collections.tables / lists / resultRegions` 可为 codegen 提供第一版集合区语义
 - [x] `browser-scan.md` 和 `docs/contracts.md` 示例通过自动测试，不再与真实结构漂移
 - [x] role exact/fuzzy fallback 一致性有单元测试锁住
+- [x] `focus.targetText` 已成为真实排序/保留信号
+- [x] `summary.discoveredInteractiveCount / retainedInteractiveCount / truncated` 与 `coverage` 语义一致
+- [x] Shadow DOM 去重不会漏掉同 host 多匿名同组控件
+- [x] scan-time verification 来自真实 locator inspection，而不是静态 `actionability`
+- [x] `possibleResultRegions` 与 `collections.resultRegions` 来源统一

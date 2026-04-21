@@ -131,8 +131,8 @@ export function resolveLocator(page, locator = {}) {
 
 function getRequirements(usage) {
   return {
-    needsVisible: ['click', 'fill', 'press', 'select', 'check', 'capture'].includes(usage),
-    needsEnabled: ['click', 'press', 'select', 'check'].includes(usage),
+    needsVisible: ['click', 'fill', 'press', 'select', 'check', 'capture', 'set_files'].includes(usage),
+    needsEnabled: ['click', 'press', 'select', 'check', 'set_files'].includes(usage),
     needsEditable: ['fill'].includes(usage),
   };
 }

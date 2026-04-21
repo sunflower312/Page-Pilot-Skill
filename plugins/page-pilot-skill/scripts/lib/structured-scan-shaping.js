@@ -2,11 +2,14 @@ import { buildLocatorCandidates } from './locator-candidates.js';
 import {
   clipText,
   compactText,
-  compareInteractivePriority,
-  shouldKeepInteractive,
+  createInteractivePriorityRuntime,
 } from './interactive-priority.js';
 import { rankLocatorCandidates, unwrapRankedLocator } from './locator-ranking.js';
-import { selectActiveDialog, selectPrimaryAction } from './semantic-model.js';
+import { selectActiveDialog } from './semantic-model.js';
+import { buildCollections, pickByLimit } from './structured-scan-collections.js';
+import { buildCoverage, sumCoverageGroupCounts } from './structured-scan-coverage.js';
+import { createScanFocusSummary, normalizeScanFocus } from './structured-scan-focus.js';
+import { buildHints } from './structured-scan-hints.js';
 
 const DETAIL_SETTINGS = {
   brief: {
@@ -412,116 +415,6 @@ function enrichInteractives(interactives = {}, raw = {}) {
   return enriched;
 }
 
-function buildCollections(raw = {}, settings = {}) {
-  const tables = pickByLimit(raw.tables ?? [], settings.maxLists).map((table) => ({
-    label: table.label || table.css || 'table',
-    headers: table.headers ?? [],
-    rowCountEstimate: table.rowCountEstimate ?? null,
-    rowActions: table.rowActions ?? [],
-    locator: {
-      strategy: 'css',
-      value: table.css,
-    },
-  }));
-  const lists = pickByLimit(raw.lists ?? [], settings.maxLists).map((list) => ({
-    label: list.label || list.css || 'list',
-    itemsCount: list.itemsCount ?? 0,
-    sampleItems: list.itemsPreview ?? [],
-    locator: {
-      strategy: 'css',
-      value: list.css,
-    },
-  }));
-  const resultRegions = [
-    ...tables
-      .filter((table) => (table.rowCountEstimate ?? 0) > 0)
-      .map((table) => ({ kind: 'table', label: table.label, itemsCount: table.rowCountEstimate ?? 0 })),
-    ...lists
-      .filter((list) => (list.itemsCount ?? 0) > 0)
-      .map((list) => ({ kind: 'list', label: list.label, itemsCount: list.itemsCount ?? 0 })),
-  ].slice(0, settings.maxLists);
-
-  return {
-    tables,
-    lists,
-    cards: [],
-    resultRegions,
-  };
-}
-
-function buildCoverage(raw = {}, groupedInteractives = {}, groupedSpecialized = {}, settings = {}, collectionSettings = {}) {
-  const retainedByGroup = {
-    buttons: groupedInteractives.buttons?.length ?? 0,
-    links: groupedInteractives.links?.length ?? 0,
-    inputs: groupedInteractives.inputs?.length ?? 0,
-    selects: groupedInteractives.selects?.length ?? 0,
-    textareas: groupedInteractives.textareas?.length ?? 0,
-    checkboxes: groupedInteractives.checkboxes?.length ?? 0,
-    specialized: {
-      radios: groupedSpecialized.radios?.length ?? 0,
-      switches: groupedSpecialized.switches?.length ?? 0,
-      sliders: groupedSpecialized.sliders?.length ?? 0,
-      tabs: groupedSpecialized.tabs?.length ?? 0,
-      options: groupedSpecialized.options?.length ?? 0,
-      menuItems: groupedSpecialized.menuItems?.length ?? 0,
-      fileInputs: groupedSpecialized.fileInputs?.length ?? 0,
-      dateInputs: groupedSpecialized.dateInputs?.length ?? 0,
-    },
-  };
-  const discoveredByGroup = {
-    buttons: raw.discoveredCounts?.buttons ?? raw.interactives?.buttons?.length ?? 0,
-    links: raw.discoveredCounts?.links ?? raw.interactives?.links?.length ?? 0,
-    inputs: raw.discoveredCounts?.inputs ?? raw.interactives?.inputs?.length ?? 0,
-    selects: raw.discoveredCounts?.selects ?? raw.interactives?.selects?.length ?? 0,
-    textareas: raw.discoveredCounts?.textareas ?? raw.interactives?.textareas?.length ?? 0,
-    checkboxes: raw.discoveredCounts?.checkboxes ?? raw.interactives?.checkboxes?.length ?? 0,
-    specialized: {
-      radios: raw.discoveredCounts?.specialized?.radios ?? raw.specializedControls?.radios?.length ?? 0,
-      switches: raw.discoveredCounts?.specialized?.switches ?? raw.specializedControls?.switches?.length ?? 0,
-      sliders: raw.discoveredCounts?.specialized?.sliders ?? raw.specializedControls?.sliders?.length ?? 0,
-      tabs: raw.discoveredCounts?.specialized?.tabs ?? raw.specializedControls?.tabs?.length ?? 0,
-      options: raw.discoveredCounts?.specialized?.options ?? raw.specializedControls?.options?.length ?? 0,
-      menuItems: raw.discoveredCounts?.specialized?.menuItems ?? raw.specializedControls?.menuItems?.length ?? 0,
-      fileInputs: raw.discoveredCounts?.specialized?.fileInputs ?? raw.specializedControls?.fileInputs?.length ?? 0,
-      dateInputs: raw.discoveredCounts?.specialized?.dateInputs ?? raw.specializedControls?.dateInputs?.length ?? 0,
-    },
-  };
-  const omittedByGroup = {
-    buttons: Math.max(0, discoveredByGroup.buttons - retainedByGroup.buttons),
-    links: Math.max(0, discoveredByGroup.links - retainedByGroup.links),
-    inputs: Math.max(0, discoveredByGroup.inputs - retainedByGroup.inputs),
-    selects: Math.max(0, discoveredByGroup.selects - retainedByGroup.selects),
-    textareas: Math.max(0, discoveredByGroup.textareas - retainedByGroup.textareas),
-    checkboxes: Math.max(0, discoveredByGroup.checkboxes - retainedByGroup.checkboxes),
-    specialized: {
-      radios: Math.max(0, discoveredByGroup.specialized.radios - retainedByGroup.specialized.radios),
-      switches: Math.max(0, discoveredByGroup.specialized.switches - retainedByGroup.specialized.switches),
-      sliders: Math.max(0, discoveredByGroup.specialized.sliders - retainedByGroup.specialized.sliders),
-      tabs: Math.max(0, discoveredByGroup.specialized.tabs - retainedByGroup.specialized.tabs),
-      options: Math.max(0, discoveredByGroup.specialized.options - retainedByGroup.specialized.options),
-      menuItems: Math.max(0, discoveredByGroup.specialized.menuItems - retainedByGroup.specialized.menuItems),
-      fileInputs: Math.max(0, discoveredByGroup.specialized.fileInputs - retainedByGroup.specialized.fileInputs),
-      dateInputs: Math.max(0, discoveredByGroup.specialized.dateInputs - retainedByGroup.specialized.dateInputs),
-    },
-  };
-
-  return {
-    discoveredByGroup,
-    retainedByGroup,
-    omittedByGroup,
-    budget: {
-      maxInteractives: settings.maxInteractives,
-      maxButtons: collectionSettings.maxButtons ?? BROWSER_COLLECTION_SETTINGS.standard.maxButtons,
-      maxInputs: collectionSettings.maxInputs ?? BROWSER_COLLECTION_SETTINGS.standard.maxInputs,
-      maxSpecializedPerGroup: settings.maxSpecializedPerGroup,
-    },
-  };
-}
-
-function pickByLimit(entries = [], limit) {
-  return entries.slice(0, Number.isFinite(limit) ? limit : entries.length);
-}
-
 function buildDocument(raw, detailLevel, settings) {
   const dialogs = pickByLimit(raw.dialogs ?? raw.landmarks?.dialogs ?? [], settings.maxDialogs);
   const frames = pickByLimit(raw.frames ?? [], settings.maxFrames);
@@ -556,104 +449,47 @@ function buildDocument(raw, detailLevel, settings) {
   };
 }
 
-function buildHints(raw, filteredEntries, detailLevel, settings, collections) {
-  const toLocatorReference = (candidate) => {
-    const locator = unwrapRankedLocator(candidate);
-    return locator ? { strategy: locator.strategy, value: locator.value } : null;
-  };
-  const toHintLocator = (entry) => {
-    return toLocatorReference(entry.preferredLocator ?? entry.recommendedLocators?.[0] ?? buildLocatorCandidates(entry)[0]);
-  };
-  const toHintLocators = (entry) =>
-    (entry.recommendedLocators ?? entry.locators ?? buildLocatorCandidates(entry))
-      .map((candidate) => toLocatorReference(candidate))
-      .filter(Boolean);
-
-  const formFields = filteredEntries
-    .filter((entry) => ['inputs', 'selects', 'textareas', 'checkboxes'].includes(entry.group))
-    .slice(0, settings.maxFormFields)
-    .map((entry) => ({
-      label: entry.accessibleName || entry.visibleText || entry.label || entry.name || entry.text || '',
-      kind: entry.group,
-      value: entry.state?.value ?? entry.value ?? '',
-      checked: entry.state?.checked ?? entry.checked ?? false,
-      required: entry.state?.required ?? entry.required ?? false,
-      locator: toHintLocator(entry),
-      locators: toHintLocators(entry),
-    }));
-
-  const actionableEntries = filteredEntries.filter((entry) => ['buttons', 'links'].includes(entry.group));
-  const activeDialog = selectActiveDialog(raw.dialogs ?? []);
-  const primaryAction = selectPrimaryAction(actionableEntries, activeDialog);
-  const possiblePrimaryForm = raw.landmarks?.forms?.[0] ?? null;
-  const possibleResultRegions = (raw.lists ?? [])
-    .filter((list) => (list.itemsCount ?? 0) >= 2)
-    .slice(0, settings.maxLists)
-    .map((list) => ({
-      label: list.label || list.css || 'list',
-      itemsCount: list.itemsCount ?? 0,
-    }));
-  const primaryCollection = collections?.resultRegions?.[0]
-    ? {
-        kind: collections.resultRegions[0].kind,
-        label: collections.resultRegions[0].label,
-      }
-    : null;
-
-  return {
-    activeDialog,
-    formFields,
-    primaryAction: primaryAction
-      ? {
-          label: primaryAction.accessibleName || primaryAction.visibleText || primaryAction.name || primaryAction.text || '',
-          locator: toHintLocator(primaryAction),
-          locators: toHintLocators(primaryAction),
-        }
-      : null,
-    possiblePrimaryForm,
-    possibleResultRegions,
-    primaryCollection,
-    context: {
-      hasFrames: (raw.frames?.length ?? 0) > 0,
-      hasShadowHosts: (raw.shadowHosts?.length ?? 0) > 0,
-      detailLevel,
-    },
-  };
-}
-
 export function normalizeRawScan(raw, options = {}) {
   const detailLevel = typeof options === 'string' ? options : options.detailLevel ?? 'standard';
-  const focus = typeof options === 'string' ? { kind: 'generic' } : options.focus ?? { kind: 'generic' };
+  const focus = normalizeScanFocus(typeof options === 'string' ? { kind: 'generic' } : options.focus ?? { kind: 'generic' });
   const includeSpecializedControls = typeof options === 'string' ? false : options.includeSpecializedControls === true;
   const collectionSettings = typeof options === 'string' ? BROWSER_COLLECTION_SETTINGS[detailLevel] : options.collectionSettings ?? BROWSER_COLLECTION_SETTINGS[detailLevel];
   const settings = DETAIL_SETTINGS[detailLevel] ?? DETAIL_SETTINGS.standard;
+  const priorityRuntime = createInteractivePriorityRuntime({ focus });
   const discoveredEntries = flattenInteractives(raw.interactives);
-  const retainedEntries = discoveredEntries.filter(shouldKeepInteractive).sort(compareInteractivePriority);
+  const retainedEntries = discoveredEntries
+    .filter((entry) => priorityRuntime.shouldKeepInteractive(entry))
+    .sort(priorityRuntime.compareInteractivePriority);
   const budgetedEntries = pickByLimit(retainedEntries, settings.maxInteractives);
   const regrouped = regroupInteractives(budgetedEntries);
   const enrichedInteractives = enrichInteractives(regrouped, raw);
   const enrichedRetainedEntries = retainedEntries.map((entry) => enrichEntry(entry, raw));
-  const specializedEntries = flattenInteractives(raw.specializedControls ?? {}).filter(shouldKeepInteractive);
+  const specializedEntries = flattenInteractives(raw.specializedControls ?? {})
+    .filter((entry) => priorityRuntime.shouldKeepInteractive(entry))
+    .sort(priorityRuntime.compareInteractivePriority);
   const groupedSpecialized = regroupSpecialized(
     specializedEntries.flatMap((entry) => [enrichEntry(entry, raw)]).filter(Boolean)
   );
   for (const [groupName, entries] of Object.entries(groupedSpecialized)) {
     groupedSpecialized[groupName] = pickByLimit(entries, settings.maxSpecializedPerGroup);
   }
+  const retainedHintEntries = [
+    ...budgetedEntries.map((entry) => enrichEntry(entry, raw)),
+    ...(includeSpecializedControls ? Object.values(groupedSpecialized).flat() : []),
+  ].sort(priorityRuntime.compareInteractivePriority);
   const collections = buildCollections(raw, settings);
-  const coverage = buildCoverage(raw, regrouped, groupedSpecialized, settings, collectionSettings);
+  const visibleSpecialized = includeSpecializedControls ? groupedSpecialized : regroupSpecialized([]);
+  const coverage = buildCoverage(raw, regrouped, visibleSpecialized, settings, collectionSettings, includeSpecializedControls);
+  const discoveredInteractiveCount = sumCoverageGroupCounts(coverage.discoveredByGroup);
+  const retainedInteractiveCount = sumCoverageGroupCounts(coverage.retainedByGroup);
+  const truncated = sumCoverageGroupCounts(coverage.omittedByGroup) > 0;
 
   return {
-    ok: true,
     schemaVersion: 'scan.v3',
     title: raw.title,
     url: raw.url,
     detailLevel,
-    focus: {
-      kind: focus.kind ?? 'generic',
-      targetText: focus.targetText ?? undefined,
-      applied: true,
-    },
+    focus: createScanFocusSummary(focus),
     document: buildDocument(raw, detailLevel, settings),
     summary: {
       mainText: clipText(raw.text, settings.mainTextChars),
@@ -662,14 +498,14 @@ export function normalizeRawScan(raw, options = {}) {
       dialogs: pickByLimit(raw.dialogs ?? [], settings.maxDialogs),
       frames: pickByLimit(raw.frames ?? [], settings.maxFrames),
       shadowHosts: pickByLimit(raw.shadowHosts ?? [], settings.maxShadowHosts),
-      retainedInteractiveCount: budgetedEntries.length,
-      discoveredInteractiveCount: discoveredEntries.length + specializedEntries.length,
-      truncated: retainedEntries.length > budgetedEntries.length,
+      retainedInteractiveCount,
+      discoveredInteractiveCount,
+      truncated,
       coverage,
     },
-    hints: buildHints(raw, enrichedRetainedEntries, detailLevel, settings, collections),
+    hints: buildHints(raw, retainedHintEntries, detailLevel, settings, collections),
     interactives: enrichedInteractives,
-    specializedControls: includeSpecializedControls ? groupedSpecialized : regroupSpecialized([]),
+    specializedControls: visibleSpecialized,
     collections,
   };
 }

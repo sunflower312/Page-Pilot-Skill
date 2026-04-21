@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectStructuredPageData } from '../../scripts/lib/structured-scan.js';
+import { collectStructuredPageData, enrichScanWithLocatorVerification } from '../../scripts/lib/structured-scan.js';
 import { buildLocatorCandidates } from '../../scripts/lib/locator-candidates.js';
 
 function createPageLike(fixtureData) {
@@ -46,6 +46,42 @@ function createRoleFallbackPageLike(fixtureData) {
     },
     locator() {
       return createLocator(0, inactiveTarget);
+    },
+  };
+}
+
+function createInspectablePageLike(fixtureData) {
+  const actionableTarget = {
+    isVisible: async () => true,
+    isEnabled: async () => true,
+    isEditable: async () => true,
+  };
+  const createLocator = (count = 1, target = actionableTarget) => ({
+    count: async () => count,
+    first() {
+      return target;
+    },
+  });
+
+  return {
+    evaluate: async (fn, detailLevel) => fn(detailLevel, fixtureData),
+    getByRole() {
+      return createLocator();
+    },
+    getByLabel() {
+      return createLocator();
+    },
+    getByText() {
+      return createLocator();
+    },
+    getByPlaceholder() {
+      return createLocator();
+    },
+    getByTestId() {
+      return createLocator();
+    },
+    locator() {
+      return createLocator();
     },
   };
 }
@@ -603,6 +639,351 @@ function createLinkPrimaryActionFixtureData() {
   };
 }
 
+function createTargetTextFixtureData() {
+  const inputs = Array.from({ length: 7 }, (_, index) => ({
+    role: 'textbox',
+    name: `Field ${index + 1}`,
+    label: `Field ${index + 1}`,
+    text: `Field ${index + 1}`,
+    placeholder: `Value ${index + 1}`,
+    css: `#field-${index + 1}`,
+    visible: true,
+    highValue: true,
+    domIndex: index,
+    withinMain: true,
+    withinForm: true,
+  }));
+
+  inputs.push({
+    role: 'textbox',
+    name: 'Workspace owner',
+    label: 'Workspace owner',
+    text: 'Workspace owner',
+    description: 'Preferred owner for this workspace',
+    placeholder: 'Casey',
+    css: '#workspace-owner',
+    visible: true,
+    highValue: true,
+    domIndex: 99,
+    withinMain: true,
+    withinForm: true,
+    localContext: {
+      heading: { text: 'Workspace settings', level: 2, css: '#workspace-heading' },
+      form: { name: 'workspace-form' },
+      landmark: { name: 'main', css: 'main' },
+    },
+  });
+
+  return {
+    title: 'Target text fixture',
+    url: 'http://fixture.local/target-text.html',
+    text: 'A page with many similar fields and one workspace-specific field.',
+    lang: 'en',
+    description: 'Target text should pull the matching field into the retained set.',
+    headings: [{ level: 1, text: 'Workspace settings', css: 'h1' }],
+    lists: [],
+    interactives: {
+      buttons: [],
+      links: [],
+      inputs,
+      selects: [],
+      textareas: [],
+      checkboxes: [],
+    },
+    landmarks: {
+      forms: [{ name: 'workspace-form' }],
+      dialogs: [],
+      mains: [{ name: 'main' }],
+    },
+    dialogs: [],
+    frames: [],
+    shadowHosts: [],
+  };
+}
+
+function createSummaryCoverageFixtureData() {
+  return {
+    title: 'Coverage fixture',
+    url: 'http://fixture.local/coverage.html',
+    text: 'Coverage fixture',
+    lang: 'en',
+    description: 'Counts should align across summary and coverage.',
+    headings: [{ level: 1, text: 'Coverage fixture', css: 'h1' }],
+    lists: [],
+    tables: [{ label: 'queue', headers: ['Ticket'], css: '#queue-table', rowCountEstimate: 4, rowActions: ['Open'] }],
+    interactives: {
+      buttons: Array.from({ length: 6 }, (_, index) => ({
+        role: 'button',
+        name: `Action ${index + 1}`,
+        text: `Action ${index + 1}`,
+        css: `#action-${index + 1}`,
+        visible: true,
+        highValue: true,
+        domIndex: index,
+        withinMain: true,
+      })),
+      links: [],
+      inputs: [
+        {
+          role: 'textbox',
+          name: 'Customer name',
+          label: 'Customer name',
+          text: 'Customer name',
+          css: '#customer-name',
+          visible: true,
+          highValue: true,
+          domIndex: 10,
+          withinMain: true,
+          withinForm: true,
+        },
+        {
+          role: 'textbox',
+          name: 'Owner',
+          label: 'Owner',
+          text: 'Owner',
+          css: '#owner',
+          visible: true,
+          highValue: true,
+          domIndex: 11,
+          withinMain: true,
+          withinForm: true,
+        },
+      ],
+      selects: [],
+      textareas: [],
+      checkboxes: [],
+    },
+    specializedControls: {
+      radios: [
+        {
+          role: 'radio',
+          name: 'Chat',
+          text: 'Chat',
+          css: '#radio-chat',
+          visible: true,
+          highValue: true,
+          domIndex: 20,
+          withinMain: true,
+          withinForm: true,
+        },
+        {
+          role: 'radio',
+          name: 'Email',
+          text: 'Email',
+          css: '#radio-email',
+          visible: true,
+          highValue: true,
+          domIndex: 21,
+          withinMain: true,
+          withinForm: true,
+        },
+      ],
+      switches: [
+        {
+          role: 'switch',
+          name: 'Escalate case',
+          text: 'Escalate case',
+          css: '#escalate-switch',
+          visible: true,
+          highValue: true,
+          domIndex: 22,
+          withinMain: true,
+          withinForm: true,
+          checked: true,
+        },
+      ],
+      sliders: [],
+      tabs: [],
+      options: [],
+      menuItems: [],
+      fileInputs: [
+        {
+          role: 'button',
+          name: 'Upload evidence',
+          text: 'Upload evidence',
+          css: '#upload-evidence',
+          visible: true,
+          highValue: true,
+          domIndex: 23,
+          withinMain: true,
+          withinForm: true,
+          controlType: 'file',
+        },
+      ],
+      dateInputs: [
+        {
+          role: 'textbox',
+          name: 'Schedule review',
+          text: 'Schedule review',
+          css: '#schedule-review',
+          visible: true,
+          highValue: true,
+          domIndex: 24,
+          withinMain: true,
+          withinForm: true,
+          controlType: 'date',
+        },
+      ],
+    },
+    discoveredCounts: {
+      buttons: 9,
+      links: 0,
+      inputs: 4,
+      selects: 0,
+      textareas: 0,
+      checkboxes: 0,
+      specialized: {
+        radios: 3,
+        switches: 1,
+        sliders: 0,
+        tabs: 0,
+        options: 0,
+        menuItems: 0,
+        fileInputs: 2,
+        dateInputs: 2,
+      },
+    },
+    landmarks: {
+      forms: [{ name: 'support-form' }],
+      dialogs: [],
+      mains: [{ name: 'main' }],
+    },
+    dialogs: [],
+    frames: [],
+    shadowHosts: [],
+  };
+}
+
+function createVerificationActionFixtureData() {
+  return {
+    title: 'Verification Action Fixture',
+    url: 'http://fixture.local/verification-action.html',
+    text: 'A page with multiple control types for scan-time verification.',
+    lang: 'en',
+    interactives: {
+      buttons: [],
+      links: [],
+      inputs: [],
+      selects: [
+        {
+          role: 'combobox',
+          name: 'Priority',
+          label: 'Priority',
+          labelSource: 'label',
+          roleSource: 'native_tag',
+          css: '#priority',
+          visible: true,
+          highValue: true,
+          domIndex: 0,
+          withinForm: true,
+        },
+      ],
+      textareas: [],
+      checkboxes: [],
+    },
+    specializedControls: {
+      radios: [
+        {
+          role: 'radio',
+          name: 'Email',
+          label: 'Email',
+          labelSource: 'label',
+          roleSource: 'aria_role',
+          css: '#contact-email',
+          visible: true,
+          highValue: true,
+          domIndex: 1,
+          withinForm: true,
+        },
+      ],
+      switches: [],
+      sliders: [],
+      tabs: [],
+      options: [],
+      menuItems: [],
+      fileInputs: [
+        {
+          role: 'button',
+          name: 'Upload evidence',
+          label: 'Upload evidence',
+          labelSource: 'label',
+          roleSource: 'native_tag',
+          css: '#evidence',
+          visible: true,
+          highValue: true,
+          domIndex: 2,
+          withinForm: true,
+        },
+      ],
+      dateInputs: [
+        {
+          role: 'textbox',
+          name: 'Schedule review',
+          label: 'Schedule review',
+          labelSource: 'label',
+          roleSource: 'native_tag',
+          css: '#schedule-review',
+          visible: true,
+          highValue: true,
+          domIndex: 3,
+          withinForm: true,
+        },
+      ],
+    },
+    headings: [{ level: 1, text: 'Verification Action Fixture', css: 'h1' }],
+    lists: [],
+    tables: [],
+    landmarks: {
+      forms: [{ name: 'verification-form' }],
+      dialogs: [],
+      mains: [{ name: 'main' }],
+    },
+    dialogs: [],
+    frames: [],
+    shadowHosts: [],
+  };
+}
+
+function createVerificationInspectionFixtureData() {
+  return {
+    title: 'Verification inspection fixture',
+    url: 'http://fixture.local/verification-inspection.html',
+    text: 'A hidden test-id button that still verifies through locator inspection.',
+    lang: 'en',
+    description: 'Verification should reflect locator inspection, not static actionability.',
+    headings: [{ level: 1, text: 'Verification inspection fixture', css: 'h1' }],
+    lists: [],
+    interactives: {
+      buttons: [
+        {
+          role: 'button',
+          name: 'Continue',
+          text: 'Continue',
+          testId: 'hidden-continue',
+          css: '#hidden-continue',
+          visible: false,
+          highValue: true,
+          domIndex: 0,
+          withinMain: true,
+        },
+      ],
+      links: [],
+      inputs: [],
+      selects: [],
+      textareas: [],
+      checkboxes: [],
+    },
+    landmarks: {
+      forms: [],
+      dialogs: [],
+      mains: [{ name: 'main' }],
+    },
+    dialogs: [],
+    frames: [],
+    shadowHosts: [],
+  };
+}
+
 test('buildLocatorCandidates returns stable ordered candidates', () => {
   const candidates = buildLocatorCandidates({
     role: 'textbox',
@@ -659,7 +1040,7 @@ test('collectStructuredPageData normalizes v2 structure and detail budgets', asy
   assert.equal(full.document.shadowHosts.length, 2);
   assert.equal(full.summary.discoveredInteractiveCount, 18);
   assert.equal(full.summary.retainedInteractiveCount, 17);
-  assert.equal(full.summary.truncated, false);
+  assert.equal(full.summary.truncated, true);
   assert.equal(full.hints.formFields.length, 8);
   assert.equal(full.summary.shadowHosts.length, 2);
   assert.equal(full.summary.headings.length, 3);
@@ -798,6 +1179,24 @@ test('collectStructuredPageData can pick a workflow link as primaryAction when b
   });
 });
 
+test('collectStructuredPageData prioritizes link primaryAction during scan-time verification', async () => {
+  const fixtureData = createLinkPrimaryActionFixtureData();
+  const verified = await collectStructuredPageData(createInspectablePageLike(fixtureData), {
+    detailLevel: 'brief',
+    verification: {
+      enabled: true,
+      maxPerElement: 1,
+      groups: ['buttons'],
+    },
+  });
+
+  const primaryLink = verified.interactives.links.find((entry) => entry.css === '#resume-plan-link');
+  assert.ok(primaryLink);
+  assert.equal(primaryLink.recommendedLocators[0].verification.attempted, true);
+  assert.equal(primaryLink.recommendedLocators[0].verification.action, 'click');
+  assert.equal(primaryLink.recommendedLocators[0].verification.unique, true);
+});
+
 test('collectStructuredPageData rewrites verified role fallbacks back into scan locators and hints', async () => {
   const scan = await collectStructuredPageData(
     createRoleFallbackPageLike({
@@ -852,4 +1251,169 @@ test('collectStructuredPageData rewrites verified role fallbacks back into scan 
   assert.equal(button.preferredLocator.value.exact, false);
   assert.equal(button.locators[0].value.exact, false);
   assert.equal(scan.hints.primaryAction?.locator?.value?.exact, false);
+});
+
+test('collectStructuredPageData uses focus.targetText as a real weak ranking signal', async () => {
+  const fixtureData = createTargetTextFixtureData();
+  const withoutTarget = await collectStructuredPageData(createPageLike(fixtureData), {
+    detailLevel: 'brief',
+    focus: { kind: 'form_fill' },
+  });
+  const withTarget = await collectStructuredPageData(createPageLike(fixtureData), {
+    detailLevel: 'brief',
+    focus: { kind: 'form_fill', targetText: 'workspace' },
+  });
+
+  assert.equal(withoutTarget.interactives.inputs.some((entry) => entry.css === '#workspace-owner'), false);
+  assert.equal(withTarget.interactives.inputs.some((entry) => entry.css === '#workspace-owner'), true);
+  assert.equal(withTarget.focus.targetText, 'workspace');
+});
+
+test('collectStructuredPageData aligns summary counts with coverage and specialized controls', async () => {
+  const scan = await collectStructuredPageData(createPageLike(createSummaryCoverageFixtureData()), {
+    detailLevel: 'brief',
+    includeSpecializedControls: true,
+  });
+
+  assert.equal(scan.summary.discoveredInteractiveCount, 21);
+  assert.equal(scan.summary.retainedInteractiveCount, 11);
+  assert.equal(scan.summary.truncated, true);
+  assert.equal(scan.summary.coverage.omittedByGroup.buttons, 5);
+  assert.equal(scan.summary.coverage.omittedByGroup.specialized.radios, 1);
+  assert.equal(scan.summary.coverage.omittedByGroup.specialized.fileInputs, 1);
+  assert.equal(scan.summary.coverage.omittedByGroup.specialized.dateInputs, 1);
+});
+
+test('collectStructuredPageData excludes specialized retained counts when specialized controls are not returned', async () => {
+  const scan = await collectStructuredPageData(createPageLike(createSummaryCoverageFixtureData()), {
+    detailLevel: 'brief',
+    includeSpecializedControls: false,
+  });
+
+  const sumPrimary = (groups) =>
+    groups.buttons + groups.links + groups.inputs + groups.selects + groups.textareas + groups.checkboxes;
+
+  assert.deepEqual(scan.specializedControls, {
+    radios: [],
+    switches: [],
+    sliders: [],
+    tabs: [],
+    options: [],
+    menuItems: [],
+    fileInputs: [],
+    dateInputs: [],
+  });
+  assert.equal(scan.summary.retainedInteractiveCount, sumPrimary(scan.summary.coverage.retainedByGroup));
+  assert.equal(scan.summary.discoveredInteractiveCount, sumPrimary(scan.summary.coverage.discoveredByGroup));
+  assert.equal(scan.summary.coverage.retainedByGroup.specialized.radios, 0);
+  assert.equal(scan.summary.coverage.retainedByGroup.specialized.fileInputs, 0);
+  assert.equal(scan.summary.coverage.retainedByGroup.specialized.dateInputs, 0);
+  assert.equal(scan.summary.coverage.discoveredByGroup.specialized.radios, 0);
+  assert.equal(scan.summary.coverage.discoveredByGroup.specialized.fileInputs, 0);
+  assert.equal(scan.summary.coverage.discoveredByGroup.specialized.dateInputs, 0);
+});
+
+test('collectStructuredPageData uses locator inspection results in scan-time verification', async () => {
+  const scan = await collectStructuredPageData(
+    createRoleFallbackPageLike(createVerificationInspectionFixtureData()),
+    {
+      detailLevel: 'brief',
+      verification: {
+        enabled: true,
+        maxPerElement: 1,
+        groups: ['buttons'],
+      },
+    }
+  );
+
+  const button = scan.interactives.buttons[0];
+  assert.equal(button.actionability.visible, false);
+  assert.equal(button.recommendedLocators[0].verification.attempted, true);
+  assert.equal(button.recommendedLocators[0].verification.visible, true);
+  assert.equal(button.recommendedLocators[0].verification.enabled, true);
+  assert.equal(button.recommendedLocators[0].verification.usable, true);
+});
+
+test('collectStructuredPageData assigns scan-time verification actions by control group', async () => {
+  const scan = await collectStructuredPageData(createInspectablePageLike(createVerificationActionFixtureData()), {
+    detailLevel: 'full',
+    includeSpecializedControls: true,
+    verification: {
+      enabled: true,
+      maxPerElement: 1,
+      groups: ['selects', 'radios', 'dateInputs', 'fileInputs'],
+    },
+  });
+
+  assert.equal(scan.interactives.selects[0].recommendedLocators[0].verification.action, 'select');
+  assert.equal(scan.specializedControls.radios[0].recommendedLocators[0].verification.action, 'check');
+  assert.equal(scan.specializedControls.dateInputs[0].recommendedLocators[0].verification.action, 'fill');
+  assert.equal(scan.specializedControls.fileInputs[0].recommendedLocators[0].verification.action, 'set_files');
+});
+
+test('enrichScanWithLocatorVerification forwards the expected usage to locator choice verification', async () => {
+  const baseScan = await collectStructuredPageData(createPageLike(createVerificationActionFixtureData()), {
+    detailLevel: 'full',
+    includeSpecializedControls: true,
+  });
+  const seenUsages = [];
+
+  const verifiedScan = await enrichScanWithLocatorVerification(
+    createInspectablePageLike(createVerificationActionFixtureData()),
+    baseScan,
+    {
+      enabled: true,
+      maxPerElement: 1,
+      groups: ['selects', 'radios', 'dateInputs', 'fileInputs'],
+    },
+    {
+      buildChoices: async (_pageLike, locatorCandidates, usage) => {
+        seenUsages.push(usage);
+        return locatorCandidates.map((candidate) => {
+          const locator = candidate.locator ?? candidate;
+          return {
+            ...candidate,
+            locator,
+            locatorType: locator.strategy,
+            matchCount: 1,
+            playwrightExpression: 'page.locator("mock")',
+            inspection: {
+              locator,
+              count: 1,
+              unique: true,
+              visible: true,
+              enabled: true,
+              editable: usage === 'fill',
+              actionable: true,
+              usable: true,
+            },
+          };
+        });
+      },
+    }
+  );
+
+  assert.equal(seenUsages.includes('select'), true);
+  assert.equal(seenUsages.includes('check'), true);
+  assert.equal(seenUsages.includes('fill'), true);
+  assert.equal(seenUsages.includes('set_files'), true);
+  assert.equal(verifiedScan.interactives.selects[0].recommendedLocators[0].verification.action, 'select');
+  assert.equal(verifiedScan.specializedControls.radios[0].recommendedLocators[0].verification.action, 'check');
+  assert.equal(verifiedScan.specializedControls.dateInputs[0].recommendedLocators[0].verification.action, 'fill');
+  assert.equal(verifiedScan.specializedControls.fileInputs[0].recommendedLocators[0].verification.action, 'set_files');
+});
+
+test('collectStructuredPageData derives result-region hints from collections and folds specialized controls into formFields', async () => {
+  const scan = await collectStructuredPageData(createPageLike(createSummaryCoverageFixtureData()), {
+    detailLevel: 'full',
+    focus: { kind: 'form_fill' },
+    includeSpecializedControls: true,
+  });
+
+  assert.deepEqual(scan.hints.possibleResultRegions, [{ kind: 'table', label: 'queue', itemsCount: 4 }]);
+  assert.deepEqual(scan.hints.primaryCollection, { kind: 'table', label: 'queue' });
+  assert.equal(scan.hints.formFields.some((entry) => entry.kind === 'radios' && entry.label === 'Chat'), true);
+  assert.equal(scan.hints.formFields.some((entry) => entry.kind === 'dateInputs' && entry.label === 'Schedule review'), true);
+  assert.equal(scan.hints.formFields.some((entry) => entry.kind === 'fileInputs' && entry.label === 'Upload evidence'), true);
+  assert.equal(scan.hints.formFields.some((entry) => entry.kind === 'switches' && entry.label === 'Escalate case'), true);
 });

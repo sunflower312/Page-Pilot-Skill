@@ -72,8 +72,15 @@
       "stabilityReason": "semantic_role_name",
       "fallbackReason": null,
       "confidence": {
-        "score": 0.94,
-        "reason": "semantic_fields_complete"
+        "level": "high",
+        "score": 0.99,
+        "reasons": [
+          "semantic_role",
+          "label",
+          "strong_name_source",
+          "strong_label_source",
+          "in_form_context"
+        ]
       },
       "locatorChoices": [
         {

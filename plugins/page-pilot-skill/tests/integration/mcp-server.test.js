@@ -604,6 +604,7 @@ test('mcp browser tools execute a full headless workflow and write artifacts', a
       'role'
     );
     assert.equal(repairedActionsResult.structuredContent.repairedArtifacts.locatorChoices[0].locator.strategy, 'role');
+    assert.equal(repairedActionsResult.structuredContent.repairedArtifacts.source.generatedFrom, 'repair_validation_evidence');
 
     const preservedCodeResult = await client.callTool({
       name: 'browser_generate_playwright',

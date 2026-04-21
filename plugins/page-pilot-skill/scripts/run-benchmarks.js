@@ -149,9 +149,13 @@ function printSummary(run) {
     console.log(
       `Coverage: qualifiedSites=${run.coverage.summary.qualifiedSiteCount}, qualifiedScenarios=${run.coverage.summary.qualifiedScenarioCount}, pendingScenarios=${run.coverage.summary.pendingScenarioCount}`
     );
-    console.log(
-      `Beta gate: ${run.coverage.betaGate.ok ? 'passed' : 'failed'}${run.coverage.betaGate.failures.length ? ` (${run.coverage.betaGate.failures.join('; ')})` : ''}`
-    );
+    if (run.coverage.betaGate.enforced === false) {
+      console.log(`Beta gate: not-applicable (${run.coverage.betaGate.reason ?? 'filtered selection'})`);
+    } else {
+      console.log(
+        `Beta gate: ${run.coverage.betaGate.ok ? 'passed' : 'failed'}${run.coverage.betaGate.failures.length ? ` (${run.coverage.betaGate.failures.join('; ')})` : ''}`
+      );
+    }
   }
 
   for (const result of run.results) {

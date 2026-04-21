@@ -235,10 +235,26 @@ export function buildEmptySummary() {
     failed: 0,
     skipped: 0,
     externalUnavailableSkipped: 0,
+    totalDurationMs: 0,
+    averageDurationMs: 0,
+    slowestScenarios: [],
   };
 }
 
 export function summarizeResults(sites = [], results = []) {
+  const timedResults = results
+    .filter((result) => Number.isFinite(result.durationMs))
+    .map((result) => ({
+      siteId: result.siteId,
+      scenarioId: result.scenarioId,
+      status: result.status,
+      durationMs: result.durationMs,
+    }));
+  const totalDurationMs = timedResults.reduce((sum, result) => sum + result.durationMs, 0);
+  const averageDurationMs = timedResults.length === 0 ? 0 : Math.round(totalDurationMs / timedResults.length);
+  const slowestScenarios = [...timedResults]
+    .sort((left, right) => right.durationMs - left.durationMs)
+    .slice(0, 5);
   const externalUnavailableSkipped = results.filter(
     (result) => result.status === 'skipped' && result.reason?.code === 'EXTERNAL_SITE_UNAVAILABLE'
   ).length;
@@ -250,6 +266,9 @@ export function summarizeResults(sites = [], results = []) {
     failed: results.filter((result) => result.status === 'failed').length,
     skipped: results.filter((result) => result.status === 'skipped').length,
     externalUnavailableSkipped,
+    totalDurationMs,
+    averageDurationMs,
+    slowestScenarios,
   };
 }
 

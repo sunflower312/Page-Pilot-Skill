@@ -304,6 +304,56 @@
 - [x] 清理 `__agentBrowser*` 一类旧内部命名，统一为 `pagePilot*`
 - [x] 跑一次关键字检查，确认旧命名只保留在历史 benchmark 产物或明确允许的历史文档中
 
+## Phase 14：收紧 browser_scan v3 协议语义
+
+**Files:**
+- Modify: `plugins/page-pilot-skill/scripts/lib/interactive-priority.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan-runtime.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan-shaping.js`
+- Modify: `plugins/page-pilot-skill/scripts/lib/structured-scan.js`
+- Modify: `plugins/page-pilot-skill/scripts/tools/analysis-tools.js`
+- Modify: `plugins/page-pilot-skill/scripts/tools/locator-choices.js`
+- Modify: `plugins/page-pilot-skill/tests/unit/structured-scan.test.js`
+- Modify: `plugins/page-pilot-skill/tests/integration/browser-workflow.test.js`
+- Modify: `docs/contracts.md`
+- Modify: `docs/tools/browser-scan.md`
+
+**Deliverables:**
+- `focus.targetText` 生效后的排序与保留规则
+- 统一后的 `summary` 顶层计数语义
+- Shadow DOM 去重正确性测试与修复
+- scan-time verification 真实 inspection 透传
+- `possibleResultRegions` / `collections.resultRegions` 一致性
+- `specializedControls` 到 `hints.formFields` 的最小接入
+- `browser_scan` 顶层 `ok` 的单一注入点
+
+- [x] 让 `focus.targetText` 真正参与弱加权匹配，至少覆盖 `accessibleName`、`visibleText`、`description`、`localContext.heading` 与集合区标签
+- [x] 统一 `summary.discoveredInteractiveCount`、`retainedInteractiveCount`、`truncated` 的统计口径，使其与 `coverage` 和 `specializedControls` 一致
+- [x] 为 Shadow DOM 同 host 多匿名同组控件补去重回归测试，并修正 key 设计避免误去重
+- [x] 让 scan-time `recommendedLocators[*].verification` 直接反映 locator inspection 结果，不再回填静态 `actionability`
+- [x] 让 `hints.possibleResultRegions` 直接从 `collections.resultRegions` 派生，避免 table/list 两套来源分裂
+- [x] 将 `radios / dateInputs / fileInputs / switches` 逐步纳入 `hints.formFields` 的摘要范围
+- [x] 清理 `browser_scan` 顶层 `ok` 的重复写入，保留单一工具层注入点
+
+## Phase 15：工程收口继续深化
+
+**Reference:**
+- `docs/superpowers/specs/2026-04-21-engineering-closure-design.md`
+- `docs/superpowers/plans/2026-04-21-engineering-closure-plan.md`
+
+**Deliverables:**
+- 公共契约单一来源
+- `browser_scan` 内部 collector 解耦
+- 工具层继续分层
+- benchmark 运维化
+- DX 与历史命名清理
+
+- [x] 建立公共工具注册表，并让公共契约测试以它为唯一期望来源
+- [x] 完成一轮 `browser_scan` 非破坏性解耦，抽离 coverage、collections、hints / focus 等纯塑形逻辑
+- [x] 将 analysis / playwright 工具注册继续拆到按工具组织的 register helper
+- [x] 为 benchmark 报告补齐耗时与慢场景视图
+- [x] 增强 doctor、安装提示与对外 DX 文档
+
 ## 验收标准
 
 - [x] 公开工具面已锁死，且只有一套文档口径
@@ -320,3 +370,13 @@
 - [x] role fallback 一致性有测试锁住
 - [x] `browser_scan v3` 已按专项计划落地
 - [x] `doctor` 与最后一轮旧命名收尾完成
+- [x] `focus.targetText` 已从“公开未生效”变为真实排序信号
+- [x] `browser_scan` summary 顶层计数与 `coverage` 口径一致
+- [x] Shadow DOM 去重在匿名同组控件场景下有测试锁住
+- [x] scan-time verification 反映真实 locator inspection 结果
+- [x] `possibleResultRegions` 与 `collections.resultRegions` 来源统一
+- [x] 公共工具注册表已经成为公共契约测试的单一来源
+- [x] `browser_scan` 的 coverage、collections、hints / focus 逻辑已完成一轮非破坏性解耦
+- [x] analysis / playwright 工具注册已继续按工具分层
+- [x] benchmark 报告已补充耗时与慢场景视图
+- [x] doctor、安装提示与 DX 文档已完成一轮工程收口

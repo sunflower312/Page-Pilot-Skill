@@ -35,6 +35,14 @@
     "cssFallbackRatio": 0,
     "assertionCount": 1,
     "codeLineCount": 12
+  },
+  "source": {
+    "sessionId": "session-123",
+    "generatedFrom": "validated_playwright_evidence",
+    "startUrl": "https://example.com/form",
+    "finalUrl": "https://example.com/form",
+    "actionCount": 2,
+    "assertionCount": 1
   }
 }
 ```

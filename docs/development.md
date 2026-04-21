@@ -12,7 +12,13 @@
 cd plugins/page-pilot-skill
 npm install
 npm run setup
+npm run install:codex
 ```
+
+其中：
+
+- `npm run setup` 负责安装 Playwright Chromium 并执行基础环境自检
+- `npm run install:codex` 负责把 `page-pilot-skill` 注册到本机 Codex MCP 配置
 
 ## 常用命令
 
@@ -80,6 +86,8 @@ npm run benchmark:test
 npm run benchmark
 ```
 
+当使用 `--site`、`--scenario` 或 `--tag` 做过滤运行时，CLI 会把 `Beta gate` 标记为 `not-applicable (filtered selection)`。这种运行用于验证所选场景，不用于判定全量 registry 是否满足 Beta 门槛。
+
 ## 环境检查
 
 ```bash
@@ -90,6 +98,12 @@ npm run doctor
 
 ```bash
 node scripts/doctor.js --require-browser
+```
+
+如果需要同时确认 Codex CLI 可用：
+
+```bash
+node scripts/doctor.js --require-codex
 ```
 
 ## 常见故障
@@ -113,8 +127,20 @@ npm run doctor
 然后确认：
 
 - `scripts/mcp-server.js` 存在
+- `scripts/server.js` 存在
+- `package.json`、`docs/contracts.md`、`docs/architecture.md`、`docs/development.md` 存在
 - Playwright Chromium 已安装
 - 本地 Codex 配置指向当前插件目录
+
+### `npm run install:codex` 失败并提示找不到 Codex CLI
+
+先执行：
+
+```bash
+node scripts/doctor.js --require-codex
+```
+
+如果这里失败，说明当前环境里没有可执行的 `codex` 命令，先修好 PATH 或安装 Codex，再重新执行安装脚本。
 
 ### benchmark 失败但 unit / integration 通过
 

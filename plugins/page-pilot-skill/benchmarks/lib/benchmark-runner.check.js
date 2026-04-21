@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 
 import { benchmarkRunSucceeded, listBenchmarks, runBenchmarks } from './benchmark-runner.js';
 import { BETA_BENCHMARK_REQUIREMENTS, buildCoverageMatrix } from './coverage-matrix.js';
+import { writeBenchmarkReports } from './report-writer.js';
 import { resolveScenarioSourcePath } from './scenario-helpers.js';
 import { siteRegistry } from '../registry/sites.js';
 
@@ -240,6 +241,11 @@ test('runBenchmarks executes only qualified scenarios and writes acceptance repo
   assert.equal(run.summary.selectedScenarioCount, 1);
   assert.equal(run.summary.executedScenarioCount, 1);
   assert.equal(run.summary.passed, 1);
+  assert.equal(run.summary.totalDurationMs >= 0, true);
+  assert.equal(run.summary.averageDurationMs >= 0, true);
+  assert.equal(Array.isArray(run.summary.slowestScenarios), true);
+  assert.equal(run.summary.slowestScenarios.length, 1);
+  assert.equal(run.summary.slowestScenarios[0].scenarioId, 'extract-qualified');
   assert.equal(run.acceptance.ok, true);
   assert.equal(
     calls.some((entry) => entry && entry.name === 'browser_scan' && entry.args.detailLevel === 'brief'),
@@ -253,7 +259,9 @@ test('runBenchmarks executes only qualified scenarios and writes acceptance repo
   assert.match(markdown, /### pending-site \(pending\)/);
   assert.match(markdown, /#### extract-qualified \(qualified\)/);
   assert.match(markdown, /## Acceptance/);
+  assert.match(markdown, /### Slowest Scenarios/);
   assert.equal(json.acceptance.ok, true);
+  assert.equal(json.summary.slowestScenarios[0].scenarioId, 'extract-qualified');
   assert.equal(json.catalog.summary.pendingSiteCount, 1);
   assert.equal(json.catalog.sites[0].scenarios[0].executable.command.includes('--site qualified-site'), true);
   assert.equal(json.catalog.sites[0].scenarios[0].executable.sourcePath, null);
@@ -561,11 +569,79 @@ test('buildCoverageMatrix skips code-quality ratio gates when every eligible sce
   assert.equal(coverage.summary.codeQualityEligibleScenarioCount, 1);
   assert.equal(coverage.summary.codeQualityExternalUnavailableSkipped, 1);
   assert.equal(coverage.codeQuality.scenarioCount, 0);
+  assert.equal(coverage.codeQuality.semanticLocatorRatio, null);
+  assert.equal(coverage.codeQuality.generatedValidationPassRate, null);
   assert.equal(
     coverage.betaGate.failures.some((failure) => /semantic locator ratio|css fallback ratio|unique locator hit rate|first validation pass rate|generated validation pass rate/.test(failure)),
     false,
     coverage.betaGate.failures.join('; ')
   );
+});
+
+test('writeBenchmarkReports renders n/a for zero-sample code-quality metrics', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-report-'));
+  const coverage = buildCoverageMatrix(
+    [
+      {
+        id: 'offline-site',
+        name: 'Offline Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/offline',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/offline'], notes: [] },
+        scenarios: [
+          {
+            id: 'offline-scenario',
+            title: 'Offline scenario',
+            status: 'qualified',
+            module: './demo/offline.js',
+            tags: ['smoke'],
+            guide: { steps: ['Open page'], expectedResult: 'Would pass if available.', failureModes: ['Site unavailable.'] },
+            metadata: { codeQualityEligible: true },
+          },
+        ],
+      },
+    ],
+    [
+      {
+        siteId: 'offline-site',
+        scenarioId: 'offline-scenario',
+        status: 'skipped',
+        reason: { code: 'EXTERNAL_SITE_UNAVAILABLE', message: 'Site unavailable.' },
+      },
+    ]
+  );
+
+  const run = {
+    runId: 'benchmark-zero-sample',
+    startedAt: '2026-04-21T00:00:00.000Z',
+    finishedAt: '2026-04-21T00:00:01.000Z',
+    filters: { site: [], scenario: [], tag: [] },
+    acceptance: { ok: true, code: 'ACCEPTANCE_PASSED', message: 'Acceptance passed.' },
+    catalog: {
+      sites: [],
+      summary: { siteCount: 1, scenarioCount: 1, qualifiedSiteCount: 1, pendingSiteCount: 0, excludedSiteCount: 0 },
+    },
+    coverage,
+    summary: {
+      siteCount: 1,
+      selectedScenarioCount: 1,
+      executedScenarioCount: 1,
+      passed: 0,
+      failed: 0,
+      skipped: 1,
+      totalDurationMs: 1000,
+      averageDurationMs: 1000,
+      slowestScenarios: [],
+    },
+    results: [],
+  };
+
+  const reportPaths = await writeBenchmarkReports(run, { outputDir, formats: ['markdown'] });
+  const markdown = await readFile(reportPaths.markdown, 'utf8');
+  assert.match(markdown, /Semantic locator ratio: n\/a/);
+  assert.match(markdown, /Generated validation pass rate: n\/a/);
+  assert.match(markdown, /Average generated code lines: n\/a/);
 });
 
 test('runBenchmarks keeps tool-level internal error pages as failures unless a scenario explicitly reclassifies them', async () => {
@@ -928,24 +1004,82 @@ test('benchmarkRunSucceeded requires both acceptance and beta gate success', () 
   assert.equal(
     benchmarkRunSucceeded({
       acceptance: { ok: true },
-      coverage: { betaGate: { ok: true } },
+      coverage: { betaGate: { ok: true, enforced: true } },
     }),
     true
   );
   assert.equal(
     benchmarkRunSucceeded({
       acceptance: { ok: true },
-      coverage: { betaGate: { ok: false } },
+      coverage: { betaGate: { ok: false, enforced: true } },
     }),
     false
   );
   assert.equal(
     benchmarkRunSucceeded({
       acceptance: { ok: false },
-      coverage: { betaGate: { ok: true } },
+      coverage: { betaGate: { ok: true, enforced: true } },
     }),
     false
   );
+  assert.equal(
+    benchmarkRunSucceeded({
+      acceptance: { ok: true },
+      coverage: { betaGate: { ok: true, enforced: false, reason: 'filtered_selection' } },
+    }),
+    true
+  );
+});
+
+test('filtered benchmark runs do not enforce the full-registry Beta gate', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'page-pilot-skill-benchmarks-filtered-'));
+  const calls = [];
+
+  const run = await runBenchmarks({
+    registry: [
+      {
+        id: 'filtered-site',
+        name: 'Filtered Site',
+        status: 'qualified',
+        baseUrl: 'https://example.test/filtered',
+        compliance: { reviewStatus: 'qualified', notes: [] },
+        evidence: { sourceLinks: ['https://example.test/filtered'], notes: [] },
+        scenarios: [
+          {
+            id: 'filtered-scenario',
+            title: 'Filtered scenario',
+            status: 'qualified',
+            module: './demo/filtered.js',
+            tags: ['smoke'],
+            guide: {
+              steps: ['Open page'],
+              expectedResult: 'Selected scenario passes without evaluating the full-registry Beta floor.',
+              failureModes: ['Unexpected full-registry Beta gate failure.'],
+            },
+          },
+        ],
+      },
+    ],
+    filters: { site: 'filtered-site' },
+    outputDir,
+    clientFactory: async () => createFakeClient(calls),
+    moduleLoader: async () => ({
+      scenario: {
+        async run() {
+          return { status: 'passed', summary: 'selected scenario passed' };
+        },
+      },
+    }),
+  });
+
+  assert.equal(run.acceptance.ok, true);
+  assert.equal(run.coverage.betaGate.enforced, false);
+  assert.equal(run.coverage.betaGate.reason, 'filtered selection');
+  assert.equal(benchmarkRunSucceeded(run), true);
+
+  const markdown = await readFile(run.reportPaths.markdown, 'utf8');
+  assert.match(markdown, /Beta gate: not-applicable \(filtered selection\)/);
+  assert.match(markdown, /Coverage scope note: code-quality eligibility counts below still describe the full registry/);
 });
 
 test('runBenchmarks preserves the primary scenario failure when withSession cleanup fails first', async () => {
